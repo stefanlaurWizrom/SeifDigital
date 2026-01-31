@@ -1,0 +1,376 @@
+﻿@model List<SeifDigital.Models.InformatieSensibila>
+
+@{
+    ViewData["Title"] = "Seif Digital";
+}
+
+<div class="container mt-4">
+    @* Token folosit de fetch (AJAX) *@
+    @Html.AntiForgeryToken()
+
+    <h2>Seif Digital</h2>
+    <div class="text-muted mb-2">
+        Logat ca: <b>@User.Identity?.Name</b>
+    </div>
+
+    <p>Aici poți salva date sensibile (parole). În SQL se salvează criptat.</p>
+
+    <hr />
+
+    <h4>Adaugă o înregistrare nouă</h4>
+
+    <form asp-controller="Home" asp-action="SalveazaDateSensibile" method="post" class="mb-4">
+        @Html.AntiForgeryToken()
+
+        <div class="mb-3">
+            <label class="form-label">Titlu (ex: RDP Server Contabilitate)</label>
+            <input type="text" name="titlu" class="form-control" placeholder="Ex: RDP 10.10.10.5" required />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">User (pentru RDP / aplicație)</label>
+            <input type="text" name="usernameSalvat" class="form-control" placeholder="Ex: CONTAB\\ion.popescu" required />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Parola</label>
+
+            <div class="input-group">
+                <input id="inputParola"
+                       type="password"
+                       name="parolaClara"
+                       class="form-control"
+                       placeholder="Parola..."
+                       required
+                       autocomplete="new-password" />
+
+                <button id="btnPeek"
+                        class="btn btn-outline-secondary"
+                        type="button"
+                        aria-label="Arată parola cât timp ții apăsat">
+                    👁
+                </button>
+            </div>
+
+            <div class="form-text">
+                Ține apăsat pe 👁 ca să vezi parola.
+            </div>
+        </div>
+
+
+        <button type="submit" class="btn btn-primary">Salvează criptat</button>
+    </form>
+
+    <hr />
+
+    <h4>Date salvate</h4>
+
+    @if (Model == null || Model.Count == 0)
+    {
+        <p><i>Nu ai încă nimic salvat.</i></p>
+    }
+    else
+    {
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Titlu</th>
+                    <th>User salvat</th>
+                    <th>Parola</th>
+                    <th>Acțiuni</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td>@item.Id</td>
+                        <td>@item.TitluAplicatie</td>
+                        <td>@item.UsernameSalvat</td>
+
+                        <td>
+                            <span id="pwd-@item.Id" class="text-muted" data-visible="0">••••••</span>
+                        </td>
+
+                        <td class="d-flex gap-2">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    id="btn-@item.Id"
+                                    onclick="toggleParola(@item.Id)">
+                                Arată parola
+                            </button>
+
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary"
+                                    id="copy-@item.Id"
+                                    onclick="copyParola(@item.Id)">
+                                Copiază
+                            </button>
+
+                            <form asp-controller="Home"
+                                  asp-action="Sterge"
+                                  method="post"
+                                  onsubmit="return confirm('Sigur vrei să ștergi această înregistrare?');"
+                                  style="margin:0;">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@item.Id" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    Șterge
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@section Scripts {
+    <script>
+                // ===== B5.1: peek ultimul caracter + hold-to-reveal în câmpul de introducere =====
+        (function setupPasswordInputUX() {
+            const input = document.getElementById("inputParola");
+            const btn = document.getElementById("btnPeek");
+            if (!input || !btn) return;
+
+            const PEEK_MS = 2000;
+            let peekTimer = null;
+            let isHoldingReveal = false;
+
+            function setHidden() {
+                if (!isHoldingReveal) input.type = "password";
+            }
+
+            function setVisible() {
+                input.type = "text";
+            }
+
+            function clearPeekTimer() {
+                if (peekTimer) {
+                    clearTimeout(peekTimer);
+                    peekTimer = null;
+                }
+            }
+
+            input.addEventListener("input", () => {
+                if (isHoldingReveal) return;
+                clearPeekTimer();
+                setVisible();
+                peekTimer = setTimeout(() => setHidden(), PEEK_MS);
+            });
+
+            const startHold = (e) => {
+                e.preventDefault();
+                isHoldingReveal = true;
+                clearPeekTimer();
+                setVisible();
+            };
+
+            const endHold = () => {
+                isHoldingReveal = false;
+                setHidden();
+            };
+
+            btn.addEventListener("mousedown", startHold);
+            btn.addEventListener("mouseup", endHold);
+            btn.addEventListener("mouseleave", endHold);
+            btn.addEventListener("touchstart", startHold, { passive: false });
+            btn.addEventListener("touchend", endHold);
+            btn.addEventListener("touchcancel", endHold);
+
+            document.addEventListener("visibilitychange", () => {
+                if (document.hidden) endHold();
+            });
+        })();
+        // === setare: cât timp rămâne parola vizibilă (milisecunde) ===
+        const AUTO_HIDE_MS = 10000; // 10 secunde
+
+        // păstrăm timer-ele pe fiecare rând (id -> timeoutId)
+        const hideTimers = {};
+
+        function stopAutoHide(id) {
+            if (hideTimers[id]) {
+                clearTimeout(hideTimers[id]);
+                delete hideTimers[id];
+            }
+        }
+
+        function startAutoHide(id, btn) {
+            stopAutoHide(id);
+            hideTimers[id] = setTimeout(() => {
+                hidePassword(id, btn);
+            }, AUTO_HIDE_MS);
+        }
+
+        function hidePassword(id, btn) {
+            stopAutoHide(id);
+
+            const span = document.getElementById("pwd-" + id);
+            span.textContent = "••••••";
+            span.classList.add("text-muted");
+            span.dataset.visible = "0";
+
+            btn.textContent = "Arată parola";
+            btn.classList.remove("btn-outline-danger");
+            btn.classList.add("btn-outline-secondary");
+        }
+
+        async function toggleParola(id) {
+            const span = document.getElementById("pwd-" + id);
+            const btn = document.getElementById("btn-" + id);
+
+            // dacă parola e deja vizibilă -> o ascundem local (fără request)
+            if (span.dataset.visible === "1") {
+                hidePassword(id, btn);
+                return;
+            }
+
+            // luăm antiforgery token din input-ul generat de @Html.AntiForgeryToken()
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            const token = tokenInput ? tokenInput.value : "";
+
+            btn.disabled = true;
+            const oldText = btn.textContent;
+            btn.textContent = "Se încarcă...";
+
+            try {
+                const response = await fetch("/Home/GetParolaJson", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+                    },
+                    body: `id=${encodeURIComponent(id)}&__RequestVerificationToken=${encodeURIComponent(token)}`
+                });
+
+                if (response.status === 401) {
+                    alert("Sesiune expirată sau 2FA nevalidat. Reîncarcă pagina.");
+                    btn.textContent = oldText;
+                    return;
+                }
+
+                if (!response.ok) {
+                    alert("Eroare la citirea parolei. Încearcă din nou.");
+                    btn.textContent = oldText;
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (!data || data.ok !== true) {
+                    alert(data?.message || "Eroare necunoscută.");
+                    btn.textContent = oldText;
+                    return;
+                }
+
+                // afișăm parola
+                span.textContent = data.parola;
+                span.classList.remove("text-muted");
+                span.dataset.visible = "1";
+
+                // schimbăm butonul
+                btn.textContent = "Ascunde parola";
+                btn.classList.remove("btn-outline-secondary");
+                btn.classList.add("btn-outline-danger");
+
+                // pornește auto-hide
+                startAutoHide(id, btn);
+            }
+            catch (e) {
+                alert("Eroare de rețea / server. Vezi Console (F12).");
+                console.error(e);
+                btn.textContent = oldText;
+            }
+            finally {
+                btn.disabled = false;
+            }
+        }
+                // ===== B6: Copy to clipboard + auto-clear (best effort) =====
+        const CLIPBOARD_CLEAR_MS = 15000; // 15 secunde
+
+        async function copyParola(id) {
+            const span = document.getElementById("pwd-" + id);
+            const btn = document.getElementById("copy-" + id);
+
+            if (!span || !btn) return;
+
+            // Copiem DOAR dacă parola este vizibilă (adică deja a fost cerută prin AJAX)
+            if (span.dataset.visible !== "1") {
+                alert("Întâi apasă «Arată parola», apoi poți copia.");
+                return;
+            }
+
+            const parola = span.textContent || "";
+            if (!parola || parola === "••••••") {
+                alert("Nu am ce copia.");
+                return;
+            }
+
+            const oldText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = "Copiez...";
+
+            try {
+                // Clipboard API (merge pe HTTPS / localhost)
+                await navigator.clipboard.writeText(parola);
+
+                btn.textContent = "Copiat!";
+                // mic feedback vizual
+                btn.classList.remove("btn-outline-primary");
+                btn.classList.add("btn-success");
+
+                // audit pe client? (nu facem acum; auditul e deja pe ViewPassword)
+
+                // best-effort: după X secunde încercăm să "ștergem" clipboard-ul
+                setTimeout(async () => {
+                    try {
+                        // Atenție: nu e garantat că browserul permite overwrite ulterior în toate cazurile
+                        await navigator.clipboard.writeText("");
+                    } catch { /* ignore */ }
+                }, CLIPBOARD_CLEAR_MS);
+
+                // revenim la starea normală după 1.5 sec
+                setTimeout(() => {
+                    btn.textContent = oldText;
+                    btn.classList.remove("btn-success");
+                    btn.classList.add("btn-outline-primary");
+                    btn.disabled = false;
+                }, 1500);
+            }
+            catch (e) {
+                console.error(e);
+
+                // fallback: select + copy (mai vechi)
+                try {
+                    const tmp = document.createElement("textarea");
+                    tmp.value = parola;
+                    tmp.style.position = "fixed";
+                    tmp.style.left = "-9999px";
+                    document.body.appendChild(tmp);
+                    tmp.focus();
+                    tmp.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(tmp);
+
+                    btn.textContent = "Copiat!";
+                    btn.classList.remove("btn-outline-primary");
+                    btn.classList.add("btn-success");
+
+                    setTimeout(() => {
+                        btn.textContent = oldText;
+                        btn.classList.remove("btn-success");
+                        btn.classList.add("btn-outline-primary");
+                        btn.disabled = false;
+                    }, 1500);
+                }
+                catch {
+                    btn.textContent = oldText;
+                    btn.disabled = false;
+                    alert("Nu pot accesa clipboard-ul (permisiuni browser). Încearcă Ctrl+C manual.");
+                }
+            }
+        }
+
+    </script>
+}

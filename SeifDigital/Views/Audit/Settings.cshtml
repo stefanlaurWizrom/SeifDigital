@@ -1,0 +1,26 @@
+﻿@{
+    ViewData["Title"] = "Audit Settings";
+}
+
+<div class="container mt-4">
+    <h2>Audit Settings</h2>
+    <p class="text-muted">Doar Domain Admins. Setarea se aplică automat (cleanup zilnic).</p>
+
+    <form asp-controller="Audit" asp-action="SettingsSave" method="post" style="max-width:520px;">
+        @Html.AntiForgeryToken()
+
+        <div class="mb-3">
+            <label class="form-label">Audit retention (zile)</label>
+            <input type="number"
+                   class="form-control"
+                   name="auditRetentionDays"
+                   min="7"
+                   max="3650"
+                   value="@ViewBag.Days"
+                   required />
+            <div class="form-text">Minim 7 zile, maxim 3650 zile.</div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Salvează</button>
+    </form>
+</div>

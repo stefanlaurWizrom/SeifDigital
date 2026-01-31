@@ -1,0 +1,195 @@
+﻿@model List<SeifDigital.Models.AuditLog>
+
+@{
+    ViewData["Title"] = "Audit Logs";
+}
+
+<div class="container-fluid mt-4 px-4">
+
+    <h2>Audit Logs</h2>
+    <div class="mb-2">
+        <a asp-controller="Audit"
+           asp-action="Settings"
+           class="btn btn-sm btn-outline-secondary">
+            ⚙️ Audit Settings
+        </a>
+    </div>
+
+    <p class="text-muted">Ultimele 200 intrări (filtrabile). Acces: Domain Admins.</p>
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-3">
+            <input class="form-control" name="actorUser" placeholder="ActorUser"
+                   value="@ViewBag.ActorUser" />
+        </div>
+
+        <div class="col-md-3">
+            <input class="form-control" name="eventType" placeholder="EventType (ex: Secret.ViewPassword)"
+                   value="@ViewBag.EventType" />
+        </div>
+
+        <div class="col-md-2">
+            <select class="form-select" name="outcome">
+                <option value="">Outcome (all)</option>
+                <option value="Success" selected="@(ViewBag.Outcome == "Success")">Success</option>
+                <option value="Fail" selected="@(ViewBag.Outcome == "Fail")">Fail</option>
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <input class="form-control" name="targetId" placeholder="TargetId"
+                   value="@ViewBag.TargetId" />
+        </div>
+
+        <div class="col-md-3">
+            <input class="form-control" type="datetime-local" name="fromUtc"
+                   value="@ViewBag.FromUtc" />
+        </div>
+
+        <div class="col-md-3">
+            <input class="form-control" type="datetime-local" name="toUtc"
+                   value="@ViewBag.ToUtc" />
+        </div>
+
+        <div class="col-md-2">
+            <button class="btn btn-primary w-100" type="submit">Filtrează</button>
+        </div>
+
+        <div class="col-md-2">
+            <a class="btn btn-outline-secondary w-100" href="/Audit">Reset</a>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle small">
+            <thead>
+                <tr>
+                    <th>Time (UTC)</th>
+                    <th>Event</th>
+                    <th>Actor</th>
+                    <th>Target</th>
+                    <th>Outcome</th>
+                    <th>Reason</th>
+                    <th>IP</th>
+                    <th>UA</th>
+                    <th>Details</th>
+                    
+                    <th>Open</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var x in Model)
+                {
+                    <tr>
+                        <td>@x.EventTimeUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td><code>@x.EventType</code></td>
+                        <td>@x.ActorUser</td>
+                        <td>@x.TargetType @x.TargetId</td>
+                        <td>@x.Outcome</td>
+                        <td>@x.Reason</td>
+                        <td>@x.ClientIp</td>
+                        <td style="max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            @x.UserAgent
+                        </td>
+                        <td style="max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            @x.DetailsJson
+                        </td>
+                        
+                        <td>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary"
+                                    onclick="openAuditDetails(this)"
+                                    data-time="@x.EventTimeUtc.ToString("yyyy-MM-dd HH:mm:ss")"
+                                    data-event="@x.EventType"
+                                    data-actor="@x.ActorUser"
+                                    data-target="@($"{x.TargetType} {x.TargetId}")"
+                                    data-outcome="@x.Outcome"
+                                    data-reason="@x.Reason"
+                                    data-ip="@x.ClientIp"
+                                    data-ua="@System.Net.WebUtility.HtmlEncode(x.UserAgent ?? "")"
+                                    data-details="@System.Net.WebUtility.HtmlEncode(x.DetailsJson ?? "")"
+                                    data-corr="@x.CorrelationId">
+                                Detalii
+                            </button>
+                        </td>
+
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="modal fade" id="auditDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Audit details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Time (UTC)</dt>
+                    <dd class="col-sm-9" id="ad_time"></dd>
+
+                    <dt class="col-sm-3">Event</dt>
+                    <dd class="col-sm-9"><code id="ad_event"></code></dd>
+
+                    <dt class="col-sm-3">Actor</dt>
+                    <dd class="col-sm-9" id="ad_actor"></dd>
+
+                    <dt class="col-sm-3">Target</dt>
+                    <dd class="col-sm-9" id="ad_target"></dd>
+
+                    <dt class="col-sm-3">Outcome</dt>
+                    <dd class="col-sm-9" id="ad_outcome"></dd>
+
+                    <dt class="col-sm-3">Reason</dt>
+                    <dd class="col-sm-9" id="ad_reason"></dd>
+
+                    <dt class="col-sm-3">Client IP</dt>
+                    <dd class="col-sm-9" id="ad_ip"></dd>
+
+                    <dt class="col-sm-3">Correlation</dt>
+                    <dd class="col-sm-9"><code id="ad_corr"></code></dd>
+
+                    <dt class="col-sm-3">User-Agent</dt>
+                    <dd class="col-sm-9">
+                        <pre class="mb-0" style="white-space:pre-wrap" id="ad_ua"></pre>
+                    </dd>
+
+                    <dt class="col-sm-3">Details JSON</dt>
+                    <dd class="col-sm-9">
+                        <pre class="mb-0" style="white-space:pre-wrap" id="ad_details"></pre>
+                    </dd>
+                </dl>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Închide</button>
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    <script>
+        function openAuditDetails(btn) {
+            const get = (name) => btn.getAttribute(name) || "";
+
+            document.getElementById("ad_time").textContent = get("data-time");
+            document.getElementById("ad_event").textContent = get("data-event");
+            document.getElementById("ad_actor").textContent = get("data-actor");
+            document.getElementById("ad_target").textContent = get("data-target");
+            document.getElementById("ad_outcome").textContent = get("data-outcome");
+            document.getElementById("ad_reason").textContent = get("data-reason");
+            document.getElementById("ad_ip").textContent = get("data-ip");
+            document.getElementById("ad_corr").textContent = get("data-corr");
+            document.getElementById("ad_ua").textContent = get("data-ua");
+            document.getElementById("ad_details").textContent = get("data-details");
+
+            const modalEl = document.getElementById("auditDetailsModal");
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+    </script>
+}
