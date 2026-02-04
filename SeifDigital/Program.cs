@@ -1,12 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authentication.Negotiate;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using SeifDigital.Data;
+using SeifDigital.Filters;          // <-- IMPORTANT (filtrul global 2FA)
 using SeifDigital.Services;
-using Microsoft.Extensions.Options;
-using Microsoft.AspNetCore.HttpOverrides;
-
 
 var builder = WebApplication.CreateBuilder(args);
+
 // Citim adresa serverului din appsettings.json
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -14,20 +14,11 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
 
-// 1. Spunem aplicației să folosească logarea de Windows (laptop)
+// 1) Autentificare Windows (IIS / Negotiate)
 builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme)
     .AddNegotiate();
 
-builder.Services.AddControllersWithViews();
-builder.Services.AddScoped<SeifDigital.Services.AuditService>();
-builder.Services.AddScoped<SettingsService>();
-builder.Services.AddHostedService<AuditCleanupService>();
-builder.Services.AddScoped<SettingsService>();
-builder.Services.AddScoped<UserNoteService>();
-builder.Services.AddScoped<UserFileService>();
-
-
-// 2. Activăm "Memoria" aplicației (Sesiunea) pentru a ține minte dacă ai băgat codul de email
+// 2) Sesiune (ține minte Status2FA)
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromMinutes(15);
@@ -38,37 +29,52 @@ builder.Services.AddSession(options =>
     options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // pe IIS cu HTTPS devine Secure
 });
 
-
-builder.Services.AddScoped<SmtpEmailSender>();
-builder.Services.Configure<CryptoOptions>(builder.Configuration.GetSection("Crypto"));
-builder.Services.AddSingleton<EncryptionService>();
-
+// 3) Forwarded Headers (IP real prin proxy/LB)
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders =
         ForwardedHeaders.XForwardedFor |
         ForwardedHeaders.XForwardedProto;
 
-    // IMPORTANT: dacă nu setezi KnownProxies/KnownNetworks, iar ForwardLimit e default,
-    // în dev de obicei merge. Pentru producție, e bine să limitezi.
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
-
-    // Dacă ai un reverse proxy / load balancer cu IP fix, îl adaugi aici, ex:
     // options.KnownProxies.Add(System.Net.IPAddress.Parse("10.0.0.10"));
 });
 
+// 4) Înregistrăm filtrul global 2FA
+builder.Services.AddScoped<Require2FAAttribute>();
+
+// 5) MVC + aplicăm filtrul global (se execută pe TOATE controllerele/acțiunile)
+builder.Services.AddControllersWithViews(options =>
+{
+    options.Filters.AddService<Require2FAAttribute>();
+});
+
+// 6) Servicii aplicație
+builder.Services.AddScoped<AuditService>();
+builder.Services.AddHostedService<AuditCleanupService>();
+
+builder.Services.AddScoped<SettingsService>();   // <-- păstrăm o singură dată (înainte era duplicat)
+builder.Services.AddScoped<UserNoteService>();
+builder.Services.AddScoped<UserFileService>();
+
+builder.Services.AddScoped<SmtpEmailSender>();
+builder.Services.AddScoped<UserProfileService>();
+
+
+builder.Services.Configure<CryptoOptions>(builder.Configuration.GetSection("Crypto"));
+builder.Services.AddSingleton<EncryptionService>();
 
 var app = builder.Build();
 
 app.UseStaticFiles();
 app.UseForwardedHeaders();
+
 app.UseRouting();
 
-// Activăm memoria de sesiune
+// IMPORTANT: Session trebuie să fie înainte de Authorization (ca filtrul să poată citi Status2FA)
 app.UseSession();
 
-// Activăm sistemul de logare
 app.UseAuthentication();
 app.UseAuthorization();
 

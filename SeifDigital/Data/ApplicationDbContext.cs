@@ -13,6 +13,8 @@ namespace SeifDigital.Data
 
         public DbSet<UserNote> UserNotes { get; set; }
         public DbSet<UserFile> UserFiles { get; set; }
+        public DbSet<UserProfile> UserProfiles { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -98,6 +100,20 @@ namespace SeifDigital.Data
                 e.ToTable("UserFile", "dbo");
                 e.HasKey(x => x.Id);
             });
+
+            // =========================
+            // UserFile (dbo.UserProfile)
+            // =========================
+            modelBuilder.Entity<UserProfile>(e =>
+            {
+                e.ToTable("UserProfile", "dbo");
+                e.Property(x => x.DomainUser).HasMaxLength(256).IsRequired();
+                e.Property(x => x.Email).HasMaxLength(256).IsRequired();
+                e.Property(x => x.EmailSource).HasMaxLength(32).IsRequired();
+
+                e.HasIndex(x => x.DomainUser).IsUnique();
+            });
+
         }
     }
 }

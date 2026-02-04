@@ -11,12 +11,16 @@ namespace SeifDigital.Controllers
     {
         private readonly SmtpEmailSender _email;
         private readonly AuditService _audit;
+        private readonly UserProfileService _profiles;
 
-        public AuthController(SmtpEmailSender email, AuditService audit)
+
+        public AuthController(SmtpEmailSender email, AuditService audit, UserProfileService profiles)
         {
             _email = email;
             _audit = audit;
+            _profiles = profiles;
         }
+
 
         // =========================
         // B9: PAGINA 2FA (GET) - NU trimite cod, doar afișează pagina + status cooldown
@@ -53,7 +57,8 @@ namespace SeifDigital.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult TrimiteCod()
+        public async Task<IActionResult> TrimiteCod()
+
         {
             // 1) verificăm Windows Authentication
             if (!(User?.Identity?.IsAuthenticated ?? false))
@@ -92,15 +97,48 @@ namespace SeifDigital.Controllers
             }
 
             // 4) email din AD
-            string? toEmail = AdUserHelper.GetEmailFromDomainUser(domainUser);
+            string? toEmail = null;
+
+            // 1) încercăm AD
+            try
+            {
+                toEmail = AdUserHelper.GetEmailFromDomainUser(domainUser);
+                if (!string.IsNullOrWhiteSpace(toEmail))
+                {
+                    // salvăm în cache (sursă AD)
+                    await _profiles.UpsertEmailAsync(domainUser, toEmail, "AD");
+                }
+            }
+            catch (Exception ex)
+            {
+                // AD/DC indisponibil sau altă eroare
+                _audit.Log(HttpContext, "2FA.SendCode", "Fail", reason: "AD_Lookup_Error",
+                    details: new { error = ex.Message });
+            }
+
+            // 2) dacă AD nu a dat email, încercăm cache
             if (string.IsNullOrWhiteSpace(toEmail))
             {
-                ViewBag.Mesaj = $"Nu pot găsi adresa de email în Active Directory pentru userul: {domainUser}";
-                _audit.Log(HttpContext, "2FA.SendCode", "Fail", reason: "AdEmail_NotFound");
+                toEmail = await _profiles.GetCachedEmailAsync(domainUser);
+
+                if (!string.IsNullOrWhiteSpace(toEmail))
+                {
+                    // marcăm folosirea cache-ului (nu schimbăm LastVerifiedUtc)
+                    await _profiles.UpsertEmailAsync(domainUser, toEmail, "CACHE");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(toEmail))
+            {
+                ViewBag.Mesaj = $"Nu pot găsi emailul pentru userul: {domainUser}. (AD indisponibil și nu există email cache-uit.)";
+                _audit.Log(HttpContext, "2FA.SendCode", "Fail", reason: "AdEmail_NotFound_And_NoCache");
                 return View("Verificare2FA");
             }
 
             ViewBag.EmailTrimis = toEmail;
+
+
+           
 
             // 5) generăm cod
             string codGenerat = new Random().Next(100000, 999999).ToString();
@@ -275,6 +313,7 @@ Dacă NU ai cerut acest cod, ignoră acest email.";
         {
             _audit.Log(HttpContext, "Auth.Logout", "Success");
             HttpContext.Session.Clear();
+            Response.Cookies.Delete(".AspNetCore.Session");
             return RedirectToAction("Verificare2FA");
         }
     }

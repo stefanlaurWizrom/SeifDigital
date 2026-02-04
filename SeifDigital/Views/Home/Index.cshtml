@@ -1,7 +1,18 @@
-﻿@model List<SeifDigital.Models.InformatieSensibila>
+﻿@model SeifDigital.Models.InformatieSensibilaListViewModel
 
 @{
     ViewData["Title"] = "Seif Digital";
+
+    string q = (string)(ViewBag.Q ?? "");
+    int pageNo = Model?.Page ?? 1;
+    int pageSize = Model?.PageSize ?? 25;
+    int total = Model?.TotalCount ?? 0;
+
+    int totalPages = (int)Math.Ceiling(total / (double)pageSize);
+    if (totalPages < 1) totalPages = 1;
+
+    if (pageNo < 1) pageNo = 1;
+    if (pageNo > totalPages) pageNo = totalPages;
 }
 
 <div class="container mt-4">
@@ -57,6 +68,15 @@
             </div>
         </div>
 
+        @* NOU: Detalii *@
+        <div class="mb-3">
+            <label class="form-label">Detalii</label>
+            <textarea name="detalii"
+                      class="form-control"
+                      rows="3"
+                      placeholder="Ex: URL, port, observații, pași de conectare..."></textarea>
+            <div class="form-text">Detaliile se salvează criptat (ca parola).</div>
+        </div>
 
         <button type="submit" class="btn btn-primary">Salvează criptat</button>
     </form>
@@ -65,71 +85,126 @@
 
     <h4>Date salvate</h4>
 
-    @if (Model == null || Model.Count == 0)
-    {
-        <p><i>Nu ai încă nimic salvat.</i></p>
-    }
-    else
-    {
-        <table class="table table-striped align-middle">
-            <thead>
+    <!-- Search form (GET) -->
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-8">
+            <input class="form-control" name="q" value="@q" placeholder="Caută în titlu, user salvat sau detalii..." />
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-outline-primary w-100" type="submit">Caută</button>
+        </div>
+        <div class="col-md-2">
+            <a class="btn btn-outline-secondary w-100" href="@Url.Action("Index", "Home")">Reset</a>
+        </div>
+    </form>
+
+    <div class="mb-2 text-muted">
+        Afișez @Model.StartItemIndex - @Model.EndItemIndex din @Model.TotalCount
+    </div>
+
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Titlu</th>
+                <th>User salvat</th>
+                <th>Parola</th>
+                <th>Acțiuni</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.Items)
+            {
                 <tr>
-                    <th>Id</th>
-                    <th>Titlu</th>
-                    <th>User salvat</th>
-                    <th>Parola</th>
-                    <th>Acțiuni</th>
+                    <td>@item.Id</td>
+                    <td>@item.TitluAplicatie</td>
+                    <td>@item.UsernameSalvat</td>
+
+                    <td>
+                        <span id="pwd-@item.Id" class="text-muted" data-visible="0">••••••</span>
+                    </td>
+
+                    <td class="d-flex gap-2">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary"
+                                id="btn-@item.Id"
+                                onclick="toggleParola(@item.Id)">
+                            Arată parola
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary"
+                                id="copy-@item.Id"
+                                onclick="copyParola(@item.Id)">
+                            Copiază
+                        </button>
+
+                        @* NOU: Detalii *@
+                        <button type="button"
+                                class="btn btn-sm btn-outline-info"
+                                id="det-@item.Id"
+                                onclick="showDetalii(@item.Id)">
+                            Detalii
+                        </button>
+
+                        <form asp-controller="Home"
+                              asp-action="Sterge"
+                              method="post"
+                              onsubmit="return confirm('Sigur vrei să ștergi această înregistrare?');"
+                              style="margin:0;">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@item.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                Șterge
+                            </button>
+                        </form>
+                    </td>
                 </tr>
-            </thead>
-            <tbody>
-                @foreach (var item in Model)
+            }
+        </tbody>
+    </table>
+
+    @if (Model.TotalPages > 1)
+    {
+        <nav aria-label="Paginator">
+            <ul class="pagination">
+                <li class="page-item @(Model.Page == 1 ? "disabled" : "")">
+                    <a class="page-link" href="@Url.Action("Index", "Home", new { page = Model.Page - 1 })">« Anterior</a>
+                </li>
+
+                @for (int p = 1; p <= Model.TotalPages; p++)
                 {
-                    <tr>
-                        <td>@item.Id</td>
-                        <td>@item.TitluAplicatie</td>
-                        <td>@item.UsernameSalvat</td>
-
-                        <td>
-                            <span id="pwd-@item.Id" class="text-muted" data-visible="0">••••••</span>
-                        </td>
-
-                        <td class="d-flex gap-2">
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary"
-                                    id="btn-@item.Id"
-                                    onclick="toggleParola(@item.Id)">
-                                Arată parola
-                            </button>
-
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-primary"
-                                    id="copy-@item.Id"
-                                    onclick="copyParola(@item.Id)">
-                                Copiază
-                            </button>
-
-                            <form asp-controller="Home"
-                                  asp-action="Sterge"
-                                  method="post"
-                                  onsubmit="return confirm('Sigur vrei să ștergi această înregistrare?');"
-                                  style="margin:0;">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="id" value="@item.Id" />
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                    Șterge
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
+                    <li class="page-item @(p == Model.Page ? "active" : "")">
+                        <a class="page-link" href="@Url.Action("Index", "Home", new { page = p })">@p</a>
+                    </li>
                 }
-            </tbody>
-        </table>
+
+                <li class="page-item @(Model.Page == Model.TotalPages ? "disabled" : "")">
+                    <a class="page-link" href="@Url.Action("Index", "Home", new { page = Model.Page + 1 })">Următor »</a>
+                </li>
+            </ul>
+        </nav>
     }
+</div>
+
+@* Modal Detalii *@
+<div class="modal fade" id="detaliiModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Detalii</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="detaliiText" style="white-space:pre-wrap; margin:0;"></pre>
+            </div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
     <script>
-                // ===== B5.1: peek ultimul caracter + hold-to-reveal în câmpul de introducere =====
+        // ===== B5.1: peek + hold-to-reveal în câmpul de introducere =====
         (function setupPasswordInputUX() {
             const input = document.getElementById("inputParola");
             const btn = document.getElementById("btnPeek");
@@ -184,6 +259,7 @@
                 if (document.hidden) endHold();
             });
         })();
+
         // === setare: cât timp rămâne parola vizibilă (milisecunde) ===
         const AUTO_HIDE_MS = 10000; // 10 secunde
 
@@ -221,13 +297,11 @@
             const span = document.getElementById("pwd-" + id);
             const btn = document.getElementById("btn-" + id);
 
-            // dacă parola e deja vizibilă -> o ascundem local (fără request)
             if (span.dataset.visible === "1") {
                 hidePassword(id, btn);
                 return;
             }
 
-            // luăm antiforgery token din input-ul generat de @Html.AntiForgeryToken()
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
             const token = tokenInput ? tokenInput.value : "";
 
@@ -264,17 +338,14 @@
                     return;
                 }
 
-                // afișăm parola
                 span.textContent = data.parola;
                 span.classList.remove("text-muted");
                 span.dataset.visible = "1";
 
-                // schimbăm butonul
                 btn.textContent = "Ascunde parola";
                 btn.classList.remove("btn-outline-secondary");
                 btn.classList.add("btn-outline-danger");
 
-                // pornește auto-hide
                 startAutoHide(id, btn);
             }
             catch (e) {
@@ -286,7 +357,8 @@
                 btn.disabled = false;
             }
         }
-                // ===== B6: Copy to clipboard + auto-clear (best effort) =====
+
+        // ===== B6: Copy to clipboard + auto-clear (best effort) =====
         const CLIPBOARD_CLEAR_MS = 15000; // 15 secunde
 
         async function copyParola(id) {
@@ -295,7 +367,6 @@
 
             if (!span || !btn) return;
 
-            // Copiem DOAR dacă parola este vizibilă (adică deja a fost cerută prin AJAX)
             if (span.dataset.visible !== "1") {
                 alert("Întâi apasă «Arată parola», apoi poți copia.");
                 return;
@@ -312,25 +383,16 @@
             btn.textContent = "Copiez...";
 
             try {
-                // Clipboard API (merge pe HTTPS / localhost)
                 await navigator.clipboard.writeText(parola);
 
                 btn.textContent = "Copiat!";
-                // mic feedback vizual
                 btn.classList.remove("btn-outline-primary");
                 btn.classList.add("btn-success");
 
-                // audit pe client? (nu facem acum; auditul e deja pe ViewPassword)
-
-                // best-effort: după X secunde încercăm să "ștergem" clipboard-ul
                 setTimeout(async () => {
-                    try {
-                        // Atenție: nu e garantat că browserul permite overwrite ulterior în toate cazurile
-                        await navigator.clipboard.writeText("");
-                    } catch { /* ignore */ }
+                    try { await navigator.clipboard.writeText(""); } catch { }
                 }, CLIPBOARD_CLEAR_MS);
 
-                // revenim la starea normală după 1.5 sec
                 setTimeout(() => {
                     btn.textContent = oldText;
                     btn.classList.remove("btn-success");
@@ -341,7 +403,6 @@
             catch (e) {
                 console.error(e);
 
-                // fallback: select + copy (mai vechi)
                 try {
                     const tmp = document.createElement("textarea");
                     tmp.value = parola;
@@ -372,5 +433,48 @@
             }
         }
 
+        // ===== NOU: Arată Detalii (AJAX + modal) =====
+        async function showDetalii(id) {
+            const btn = document.getElementById("det-" + id);
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            const token = tokenInput ? tokenInput.value : "";
+
+            const oldText = btn ? btn.textContent : "Detalii";
+            if (btn) { btn.disabled = true; btn.textContent = "Se încarcă..."; }
+
+            try {
+                const response = await fetch("/Home/GetDetaliiJson", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+                    },
+                    body: `id=${encodeURIComponent(id)}&__RequestVerificationToken=${encodeURIComponent(token)}`
+                });
+
+                if (response.status === 401) {
+                    alert("Sesiune expirată sau 2FA nevalidat. Reîncarcă pagina.");
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (!response.ok || !data || data.ok !== true) {
+                    alert(data?.message || "Nu pot încărca detaliile.");
+                    return;
+                }
+
+                document.getElementById("detaliiText").textContent = data.detalii || "(fără detalii)";
+
+                const modal = new bootstrap.Modal(document.getElementById("detaliiModal"));
+                modal.show();
+            }
+            catch (e) {
+                console.error(e);
+                alert("Eroare de rețea / server la încărcarea detaliilor.");
+            }
+            finally {
+                if (btn) { btn.disabled = false; btn.textContent = oldText; }
+            }
+        }
     </script>
 }
