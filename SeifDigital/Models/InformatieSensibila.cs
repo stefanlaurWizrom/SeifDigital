@@ -9,6 +9,7 @@ namespace SeifDigital.Models
         public string? NumeUtilizator { get; set; }     // OWNER (user domeniu logat)
         public string? UsernameSalvat { get; set; }     // user pentru RDP/aplicație (EDITABIL)
         public string? TitluAplicatie { get; set; }     // titlu
+        public string? OwnerKey { get; set; }  // email (recomandat) sau fallback domain\user
 
         public string? DateCriptate { get; set; }       // parola criptată (string)
         public string? DetaliiCriptate { get; set; }    // detalii criptate (string)  <-- NOU

@@ -1,0 +1,47 @@
+﻿@{
+    ViewData["Title"] = "Autentificare";
+    var email = (ViewBag.Email as string) ?? "";
+}
+
+<div class="text-center" style="max-width:520px; margin: 40px auto;">
+    <h2>WizVault - Autentificare</h2>
+    <p>Introdu emailul @("@wizrom.ro") și parola.</p>
+
+    @if (ViewBag.Mesaj != null)
+    {
+        <div class="alert alert-danger">@ViewBag.Mesaj</div>
+    }
+
+    @if (ViewBag.Info != null)
+    {
+        <div class="alert alert-info">@ViewBag.Info</div>
+    }
+
+    <form method="post" asp-controller="Account" asp-action="Login">
+        @Html.AntiForgeryToken()
+
+        <div class="mb-3 text-start">
+            <label class="form-label">Email</label>
+            <input class="form-control" type="email" name="email" value="@email" required />
+            <div class="form-text">Doar adrese @("@wizrom.ro")</div>
+        </div>
+
+        <div class="mb-3 text-start">
+            <label class="form-label">Parolă</label>
+            <input class="form-control" type="password" name="password" required />
+            <div class="form-text">
+                Minim 12 caractere, litere mari/mici, cifre și simbol.
+            </div>
+        </div>
+
+        <div class="d-grid gap-2">
+            <button class="btn btn-primary" type="submit" name="mode" value="login">Login</button>
+
+            <div class="alert alert-secondary mt-2">
+                Dacă nu ai cont încă, apasă direct pe „Creează cont”.
+            </div>
+
+            <button class="btn btn-outline-dark" type="submit" name="mode" value="create">Creează cont</button>
+        </div>
+    </form>
+</div>

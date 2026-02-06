@@ -1,7 +1,7 @@
 ﻿@model SeifDigital.Models.InformatieSensibilaListViewModel
 
 @{
-    ViewData["Title"] = "Seif Digital";
+    ViewData["Title"] = "Parole";
 
     string q = (string)(ViewBag.Q ?? "");
     int pageNo = Model?.Page ?? 1;
@@ -13,13 +13,24 @@
 
     if (pageNo < 1) pageNo = 1;
     if (pageNo > totalPages) pageNo = totalPages;
+
+
+    // compute paging and qEsc as before
+    var prevDisabled = pageNo <= 1;
+    var nextDisabled = pageNo >= totalPages;
+    var qEsc = Uri.EscapeDataString(q ?? "");
+    var prevPage = pageNo - 1;
+    var nextPage = pageNo + 1;
+    var prevHref = prevDisabled ? "#" : $"/Home?{(string.IsNullOrEmpty(qEsc) ? "" : $"q={qEsc}&")}page={prevPage}";
+    var nextHref = nextDisabled ? "#" : $"/Home?{(string.IsNullOrEmpty(qEsc) ? "" : $"q={qEsc}&")}page={nextPage}";
 }
 
 <div class="container mt-4">
     @* Token folosit de fetch (AJAX) *@
     @Html.AntiForgeryToken()
 
-    <h2>Seif Digital</h2>
+    <h2 class="mb-1">Parole</h2>
+
     <div class="text-muted mb-2">
         Logat ca: <b>@User.Identity?.Name</b>
     </div>
@@ -164,27 +175,27 @@
         </tbody>
     </table>
 
-    @if (Model.TotalPages > 1)
-    {
-        <nav aria-label="Paginator">
-            <ul class="pagination">
-                <li class="page-item @(Model.Page == 1 ? "disabled" : "")">
-                    <a class="page-link" href="@Url.Action("Index", "Home", new { page = Model.Page - 1 })">« Anterior</a>
-                </li>
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div class="text-muted small">
+            Pagina <b>@pageNo</b> din <b>@totalPages</b>
+        </div>
 
-                @for (int p = 1; p <= Model.TotalPages; p++)
-                {
-                    <li class="page-item @(p == Model.Page ? "active" : "")">
-                        <a class="page-link" href="@Url.Action("Index", "Home", new { page = p })">@p</a>
-                    </li>
-                }
+        <div class="btn-group">
+            <a class="btn btn-outline-secondary @(prevDisabled ? "disabled" : "")"
+               href="@prevHref"
+               tabindex="@(prevDisabled ? "-1" : "0")"
+               aria-disabled="@(prevDisabled ? "true" : "false")">
+                ‹ Prev
+            </a>
 
-                <li class="page-item @(Model.Page == Model.TotalPages ? "disabled" : "")">
-                    <a class="page-link" href="@Url.Action("Index", "Home", new { page = Model.Page + 1 })">Următor »</a>
-                </li>
-            </ul>
-        </nav>
-    }
+            <a class="btn btn-outline-secondary @(nextDisabled ? "disabled" : "")"
+               href="@nextHref"
+               tabindex="@(nextDisabled ? "-1" : "0")"
+               aria-disabled="@(nextDisabled ? "true" : "false")">
+                Next ›
+            </a>
+        </div>
+    </div>
 </div>
 
 @* Modal Detalii *@

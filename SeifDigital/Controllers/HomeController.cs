@@ -7,6 +7,7 @@ using SeifDigital.Data;
 using SeifDigital.Services;
 using System.Text;
 using System.Text.RegularExpressions;
+using SeifDigital.Utils;
 
 namespace SeifDigital.Controllers
 {
@@ -29,19 +30,18 @@ namespace SeifDigital.Controllers
         {
             // Verificare 2FA
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
-            {
-                return RedirectToAction("Verificare2FA", "Auth");
-            }
+                return RedirectToAction("Login", "Account");
 
-            string userCurent = User.Identity?.Name ?? "User_Domeniu";
+
+            // IMPORTANT: ownerKey = email (Mac + Windows) sau fallback
+            string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
             const int pageSize = 25;
 
-            // If no search term, use EF query with optional LIKE (keeps previous behavior)
             if (string.IsNullOrWhiteSpace(q))
             {
                 var baseQuery = _context.InformatiiSensibile
                     .AsNoTracking()
-                    .Where(x => x.NumeUtilizator == userCurent);
+                    .Where(x => x.OwnerKey == ownerKey);
 
                 var totalCount = await baseQuery.CountAsync();
 
@@ -69,12 +69,11 @@ namespace SeifDigital.Controllers
                 return View(modelNoSearch);
             }
 
-            // If search term present, use full-text (CONTAINS). This requires the full-text index to exist.
+            // Search path: use FREETEXT (safer for user input)
             var qTrimmed = q.Trim();
             var skip = (page - 1) * pageSize;
             int totalCountSearch = 0;
 
-            // 1) Get totalCount using ADO.NET + parameterized query (uses CONTAINS)
             var conn = _context.Database.GetDbConnection();
             try
             {
@@ -84,11 +83,11 @@ namespace SeifDigital.Controllers
                 using var countCmd = conn.CreateCommand();
                 countCmd.CommandText =
                     "SELECT COUNT(1) FROM dbo.InformatiiSensibile " +
-                    "WHERE NumeUtilizator = @owner AND CONTAINS((TitluAplicatie, UsernameSalvat, DetaliiTokens), @term);";
+                    "WHERE OwnerKey = @owner AND FREETEXT((TitluAplicatie, UsernameSalvat, DetaliiTokens), @term);";
 
                 var pOwner = countCmd.CreateParameter();
                 pOwner.ParameterName = "@owner";
-                pOwner.Value = userCurent;
+                pOwner.Value = ownerKey;
                 countCmd.Parameters.Add(pOwner);
 
                 var pTerm = countCmd.CreateParameter();
@@ -101,7 +100,6 @@ namespace SeifDigital.Controllers
             }
             finally
             {
-                // keep connection open if needed by EF; EF will open/close as needed. We close explicit here.
                 if (conn.State == System.Data.ConnectionState.Open)
                     await conn.CloseAsync();
             }
@@ -111,13 +109,12 @@ namespace SeifDigital.Controllers
             if (page < 1) page = 1;
             if (page > totalPagesSearch) page = totalPagesSearch;
 
-            // 2) Get paged items using FromSqlInterpolated with CONTAINS + OFFSET/FETCH
             var itemsSearch = await _context.InformatiiSensibile
                 .FromSqlInterpolated($@"
                     SELECT *
                     FROM dbo.InformatiiSensibile
-                    WHERE NumeUtilizator = {userCurent}
-                      AND CONTAINS((TitluAplicatie, UsernameSalvat, DetaliiTokens), {qTrimmed})
+                    WHERE OwnerKey = {ownerKey}
+                      AND FREETEXT((TitluAplicatie, UsernameSalvat, DetaliiTokens), {qTrimmed})
                     ORDER BY Id DESC
                     OFFSET {skip} ROWS FETCH NEXT {pageSize} ROWS ONLY")
                 .AsNoTracking()
@@ -133,7 +130,6 @@ namespace SeifDigital.Controllers
             };
 
             ViewBag.Q = q ?? "";
-
             return View(model);
         }
 
@@ -142,7 +138,6 @@ namespace SeifDigital.Controllers
         [ValidateAntiForgeryToken]
         public IActionResult SalveazaDateSensibile(string titlu, string usernameSalvat, string parolaClara, string? detalii)
         {
-            // Verificare 2FA (unchanged)
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
             {
                 _audit.Log(HttpContext,
@@ -153,7 +148,8 @@ namespace SeifDigital.Controllers
                     targetId: null,
                     details: new { titlu });
 
-                return RedirectToAction("Verificare2FA", "Auth");
+                return RedirectToAction("Login", "Account");
+
             }
 
             if (string.IsNullOrWhiteSpace(titlu) ||
@@ -171,6 +167,9 @@ namespace SeifDigital.Controllers
                 return RedirectToAction("Index");
             }
 
+            // IMPORTANT: ownerKey = email (Mac + Windows) sau fallback
+            string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
+
             // 1) Criptăm parola
             string parolaCriptata = _crypto.Encrypt(parolaClara);
 
@@ -179,17 +178,16 @@ namespace SeifDigital.Controllers
             if (!string.IsNullOrWhiteSpace(detalii))
                 detaliiCriptate = _crypto.Encrypt(detalii);
 
-            // 2b) GENERARE TOKENI pentru detalii (safe: nu salva întreg textul, ci tokenii)
+            // 2b) Tokeni pentru căutare (fără text complet)
             string? detaliiTokens = null;
             if (!string.IsNullOrWhiteSpace(detalii))
-            {
                 detaliiTokens = GenerateSearchTokens(detalii);
-            }
 
             // 3) Construim rândul pentru SQL
             var nou = new InformatieSensibila
             {
-                NumeUtilizator = User.Identity?.Name ?? "User_Domeniu",
+                OwnerKey = ownerKey,                          // CHEIA UNICĂ PENTRU VAULT
+                NumeUtilizator = User.Identity?.Name ?? "",   // păstrăm pentru istoric/audit (optional)
                 TitluAplicatie = titlu,
                 UsernameSalvat = usernameSalvat,
                 DateCriptate = parolaCriptata,
@@ -197,7 +195,6 @@ namespace SeifDigital.Controllers
                 DetaliiTokens = detaliiTokens
             };
 
-            // 4) Salvăm în SQL
             _context.InformatiiSensibile.Add(nou);
             _context.SaveChanges();
 
@@ -211,20 +208,17 @@ namespace SeifDigital.Controllers
             return RedirectToAction("Index");
         }
 
-        // helper în același controller (copiază în clasă)
+        // helper în același controller
         private static string GenerateSearchTokens(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return input;
 
-            // normalize: lowercase, remove non-letters/digits, split on whitespace, deduplicate
             var lower = input.ToLowerInvariant();
-
-            // remove punctuation except spaces
             lower = Regex.Replace(lower, @"[^\p{L}\p{Nd}\s]", " ");
 
             var parts = lower.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                              .Select(p => p.Trim())
-                             .Where(p => p.Length >= 2) // drop very short tokens
+                             .Where(p => p.Length >= 2)
                              .Distinct();
 
             return string.Join(' ', parts);
@@ -235,7 +229,6 @@ namespace SeifDigital.Controllers
         [ValidateAntiForgeryToken]
         public IActionResult GetParolaJson(int id)
         {
-            // 1) Verificare 2FA pentru apelul AJAX
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
             {
                 _audit.Log(HttpContext,
@@ -248,12 +241,10 @@ namespace SeifDigital.Controllers
                 return Unauthorized(new { ok = false, message = "2FA nu este validat." });
             }
 
-            // 2) User curent
-            string userCurent = User.Identity?.Name ?? "User_Domeniu";
+            string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
 
-            // 3) Luăm doar înregistrarea userului curent
             var item = _context.InformatiiSensibile
-                .FirstOrDefault(x => x.Id == id && x.NumeUtilizator == userCurent);
+                .FirstOrDefault(x => x.Id == id && x.OwnerKey == ownerKey);
 
             if (item == null)
             {
@@ -267,7 +258,6 @@ namespace SeifDigital.Controllers
                 return NotFound(new { ok = false, message = "Nu găsesc înregistrarea." });
             }
 
-            // 4) Decriptăm și returnăm JSON
             try
             {
                 string parolaClara = _crypto.Decrypt(item.DateCriptate ?? "");
@@ -312,10 +302,10 @@ namespace SeifDigital.Controllers
                 return Unauthorized(new { ok = false, message = "2FA nu este validat." });
             }
 
-            string userCurent = User.Identity?.Name ?? "User_Domeniu";
+            string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
 
             var item = _context.InformatiiSensibile
-                .FirstOrDefault(x => x.Id == id && x.NumeUtilizator == userCurent);
+                .FirstOrDefault(x => x.Id == id && x.OwnerKey == ownerKey);
 
             if (item == null)
             {
@@ -358,7 +348,7 @@ namespace SeifDigital.Controllers
             }
         }
 
-        // ====== ȘTERGERE: șterge doar înregistrarea userului curent ======
+        // ====== ȘTERGERE: șterge doar înregistrarea ownerKey curent ======
         [HttpPost]
         [ValidateAntiForgeryToken]
         public IActionResult Sterge(int id)
@@ -372,13 +362,14 @@ namespace SeifDigital.Controllers
                     targetType: "Secret",
                     targetId: id.ToString());
 
-                return RedirectToAction("Verificare2FA", "Auth");
+                return RedirectToAction("Login", "Account");
+
             }
 
-            string userCurent = User.Identity?.Name ?? "User_Domeniu";
+            string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
 
             var item = _context.InformatiiSensibile
-                .FirstOrDefault(x => x.Id == id && x.NumeUtilizator == userCurent);
+                .FirstOrDefault(x => x.Id == id && x.OwnerKey == ownerKey);
 
             if (item == null)
             {

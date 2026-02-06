@@ -46,3 +46,45 @@ button.accept-policy {
   white-space: nowrap;
   line-height: 60px;
 }
+
+/* Brand title styling to match previous visual */
+a.navbar-brand .brand-title {
+  display: inline-block;
+  color: #0b5b87;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  font-size: 1.25rem;
+  line-height: 1;
+  font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Small subtitle under the brand */
+a.navbar-brand .brand-sub,
+.footer .brand-sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #6c757d;
+}
+
+/* small logo shown under the title */
+.brand-logo-small,
+.brand-logo-small-inline {
+    height: 16px; /* << smaller than the title */
+    width: auto;
+    vertical-align: middle;
+}
+
+/* footer inline small logo slightly lower to match text baseline */
+.brand-logo-small-inline {
+    display: inline-block;
+    margin-left: 6px;
+    margin-top: -2px;
+}
+
+/* ensure navbar-brand images don't overflow */
+a.navbar-brand img {
+    max-width: 180px;
+    height: auto;
+    display: block;
+}

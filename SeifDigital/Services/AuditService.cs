@@ -41,6 +41,22 @@ namespace SeifDigital.Services
             return s.Length <= max ? s : s.Substring(0, max);
         }
 
+        // NOU: actor din noul login (Session) + fallback Windows/Claims
+        private static string GetActor(HttpContext http)
+        {
+            // 1) noul flow (email+parolă) - păstrat în Session
+            var email = http.Session.GetString("LoginEmail");
+            if (!string.IsNullOrWhiteSpace(email))
+                return email.Trim().ToLowerInvariant();
+
+            // 2) fallback (dacă ai vreodată Windows auth / alt auth)
+            var name = http.User?.Identity?.Name;
+            if (!string.IsNullOrWhiteSpace(name))
+                return name;
+
+            return "UNKNOWN";
+        }
+
         // =========================
         // Log cu HttpContext (request user)
         // =========================
@@ -53,7 +69,7 @@ namespace SeifDigital.Services
             string? targetId = null,
             object? details = null)
         {
-            var actor = http.User?.Identity?.Name ?? "UNKNOWN";
+            var actor = GetActor(http);
 
             var userAgent = http.Request.Headers.UserAgent.ToString();
             userAgent = Trunc(userAgent, 512);

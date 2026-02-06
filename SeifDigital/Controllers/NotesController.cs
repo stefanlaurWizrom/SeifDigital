@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using SeifDigital.Services;
+using SeifDigital.Utils;
 
 namespace SeifDigital.Controllers
 {
@@ -17,16 +18,28 @@ namespace SeifDigital.Controllers
         [HttpGet]
         public async Task<IActionResult> Index(string? q, int page = 1)
         {
-            var userCurent = User?.Identity?.Name ?? "UNKNOWN";
+            // 2FA gate (important)
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction("Login", "Account");
+
+
+            // IMPORTANT: ownerKey = email (Mac + Windows)
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
+            var domainUser = User?.Identity?.Name ?? "UNKNOWN";
 
             const int pageSize = 25;
 
-            var (items, total) = await _notes.SearchForUserAsync(userCurent, q, page, pageSize);
+            // Service-ul trebuie să caute după OwnerKey (nu OwnerUser)
+            var (items, total) = await _notes.SearchForOwnerKeyAsync(ownerKey, q, page, pageSize);
 
             ViewBag.Q = q ?? "";
             ViewBag.Page = page < 1 ? 1 : page;
             ViewBag.PageSize = pageSize;
             ViewBag.Total = total;
+
+            // optional debug
+            ViewBag.OwnerKey = ownerKey;
+            ViewBag.DomainUser = domainUser;
 
             return View(items);
         }
@@ -35,9 +48,15 @@ namespace SeifDigital.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Add(string text)
         {
-            var userCurent = User?.Identity?.Name ?? "UNKNOWN";
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction("Login", "Account");
 
-            await _notes.AddAsync(userCurent, text);
+
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
+            var domainUser = User?.Identity?.Name ?? "UNKNOWN";
+
+            // Add trebuie să seteze OwnerKey + păstrează OwnerUser pentru istoric
+            await _notes.AddAsync(ownerKey, domainUser, text);
 
             _audit.Log(HttpContext, "Notes.Add", "Success",
                 targetType: "UserNote",
@@ -50,9 +69,14 @@ namespace SeifDigital.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(long id)
         {
-            var userCurent = User?.Identity?.Name ?? "UNKNOWN";
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction("Login", "Account");
 
-            await _notes.DeleteAsync(id, userCurent);
+
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
+
+            // Delete trebuie să valideze OwnerKey, nu OwnerUser
+            await _notes.DeleteAsync(id, ownerKey);
 
             _audit.Log(HttpContext, "Notes.Delete", "Success",
                 targetType: "UserNote",

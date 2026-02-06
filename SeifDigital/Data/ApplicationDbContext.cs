@@ -15,13 +15,38 @@ namespace SeifDigital.Data
         public DbSet<UserFile> UserFiles { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
 
+        // Login user/parola
+        public DbSet<UserAccount> UserAccounts { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
             // =========================
-            // AuditLog (EXISTENT - NU STRICĂM)
+            // InformatiiSensibile (dbo.InformatiiSensibile)
+            // =========================
+            modelBuilder.Entity<InformatieSensibila>(e =>
+            {
+                e.ToTable("InformatiiSensibile", "dbo");
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.OwnerKey).HasMaxLength(256);
+                e.Property(x => x.NumeUtilizator).HasMaxLength(256);
+
+                e.Property(x => x.TitluAplicatie).HasMaxLength(256);
+                e.Property(x => x.UsernameSalvat).HasMaxLength(256);
+
+                // Criptate -> de obicei NVARCHAR(MAX) / VARCHAR(MAX) în DB.
+                // Dacă în DB sunt altfel, ajustăm.
+                e.Property(x => x.DateCriptate);
+                e.Property(x => x.DetaliiCriptate);
+                e.Property(x => x.DetaliiTokens);
+
+                e.HasIndex(x => x.OwnerKey);
+            });
+
+            // =========================
+            // AuditLog (dbo.AuditLog)
             // =========================
             modelBuilder.Entity<AuditLog>(e =>
             {
@@ -50,46 +75,37 @@ namespace SeifDigital.Data
 
                 e.Property(x => x.Key).HasMaxLength(128);
                 e.Property(x => x.Value).HasMaxLength(1024);
-
                 e.Property(x => x.UpdatedUtc).HasColumnType("datetime2(3)");
             });
 
             // =========================
             // UserNote (dbo.UserNote)
-            //
-            // IMPORTANT:
-            //  - în DB ai OwnerUser, NoteText, CreatedUtc, UpdatedUtc + o coloană extra "Text" (NOT NULL)
-            //  - noi mapăm proprietatea Text -> NoteText
-            //  - și ignorăm coloana "Text" din DB ca să nu fie cerută de EF la INSERT/UPDATE
+            // Text -> NoteText
             // =========================
             modelBuilder.Entity<UserNote>(e =>
             {
                 e.ToTable("UserNote", "dbo");
                 e.HasKey(x => x.Id);
                 e.Property(x => x.Id).HasColumnType("bigint");
+
                 e.Property(x => x.OwnerUser)
                     .HasColumnName("OwnerUser")
                     .HasMaxLength(256)
                     .IsRequired();
+
+                e.Property(x => x.OwnerKey)
+                    .HasColumnName("OwnerKey")
+                    .HasMaxLength(256);
 
                 e.Property(x => x.Text)
                     .HasColumnName("NoteText")
                     .HasMaxLength(255)
                     .IsRequired();
 
-                e.Property(x => x.CreatedUtc)
-                    .HasColumnType("datetime2(3)")
-                    .IsRequired();
+                e.Property(x => x.CreatedUtc).HasColumnType("datetime2(3)").IsRequired();
+                e.Property(x => x.UpdatedUtc).HasColumnType("datetime2(3)").IsRequired();
 
-                e.Property(x => x.UpdatedUtc)
-                    .HasColumnType("datetime2(3)")
-                    .IsRequired();
-
-                // există o coloană fizică "Text" în DB, dar NU există proprietate în model -> o ignorăm explicit
-                // (EF nu o va include la insert/update)
-                e.Ignore("_"); // no-op, doar ca să fie clar că nu mapăm coloana "Text"
-
-                e.HasIndex(x => x.OwnerUser);
+                e.HasIndex(x => x.OwnerKey);
             });
 
             // =========================
@@ -102,11 +118,12 @@ namespace SeifDigital.Data
             });
 
             // =========================
-            // UserFile (dbo.UserProfile)
+            // UserProfile (dbo.UserProfile) - legacy/cache
             // =========================
             modelBuilder.Entity<UserProfile>(e =>
             {
                 e.ToTable("UserProfile", "dbo");
+
                 e.Property(x => x.DomainUser).HasMaxLength(256).IsRequired();
                 e.Property(x => x.Email).HasMaxLength(256).IsRequired();
                 e.Property(x => x.EmailSource).HasMaxLength(32).IsRequired();
@@ -114,6 +131,48 @@ namespace SeifDigital.Data
                 e.HasIndex(x => x.DomainUser).IsUnique();
             });
 
+            // =========================
+            // UserAccount (dbo.UserAccount) - LOGIN
+            // PasswordHash VARBINARY(64) <-> byte[]
+            // PasswordSalt VARBINARY(16) <-> byte[]
+            // =========================
+            modelBuilder.Entity<UserAccount>(e =>
+            {
+                e.ToTable("UserAccount", "dbo");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Id).HasColumnType("bigint");
+
+                e.Property(x => x.Email)
+                    .HasMaxLength(256)
+                    .IsRequired();
+
+                e.HasIndex(x => x.Email).IsUnique();
+
+                e.Property(x => x.PasswordHash)
+                    .HasColumnType("varbinary(64)")
+                    .IsRequired();
+
+                e.Property(x => x.PasswordSalt)
+                    .HasColumnType("varbinary(16)")
+                    .IsRequired();
+
+                e.Property(x => x.CreatedUtc)
+                    .HasColumnType("datetime2(3)")
+                    .IsRequired();
+
+                e.Property(x => x.UpdatedUtc)
+                    .HasColumnType("datetime2(3)")
+                    .IsRequired();
+
+                e.Property(x => x.IsActive)
+                    .HasColumnType("bit")
+                    .IsRequired();
+
+                e.Property(x => x.IsAdmin)
+                    .HasColumnType("bit")
+                    .IsRequired();
+
+            });
         }
     }
 }

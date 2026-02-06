@@ -1,35 +1,27 @@
-﻿using Microsoft.AspNetCore.Authentication.Negotiate;
-using Microsoft.AspNetCore.HttpOverrides;
+﻿using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using SeifDigital.Data;
-using SeifDigital.Filters;          // <-- IMPORTANT (filtrul global 2FA)
+using SeifDigital.Filters;
 using SeifDigital.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Citim adresa serverului din appsettings.json
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// Activăm conexiunea la SQL Server
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
 
-// 1) Autentificare Windows (IIS / Negotiate)
-builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme)
-    .AddNegotiate();
-
-// 2) Sesiune (ține minte Status2FA)
+// Session
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(15);
-
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SameSite = SameSiteMode.Lax;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // pe IIS cu HTTPS devine Secure
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
 });
 
-// 3) Forwarded Headers (IP real prin proxy/LB)
+// Forwarded headers (safe)
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders =
@@ -38,32 +30,33 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
-    // options.KnownProxies.Add(System.Net.IPAddress.Parse("10.0.0.10"));
 });
 
-// 4) Înregistrăm filtrul global 2FA
+// Global filter 2FA
 builder.Services.AddScoped<Require2FAAttribute>();
 
-// 5) MVC + aplicăm filtrul global (se execută pe TOATE controllerele/acțiunile)
 builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.AddService<Require2FAAttribute>();
 });
 
-// 6) Servicii aplicație
+// Services
 builder.Services.AddScoped<AuditService>();
 builder.Services.AddHostedService<AuditCleanupService>();
 
-builder.Services.AddScoped<SettingsService>();   // <-- păstrăm o singură dată (înainte era duplicat)
+builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<UserNoteService>();
 builder.Services.AddScoped<UserFileService>();
 
 builder.Services.AddScoped<SmtpEmailSender>();
 builder.Services.AddScoped<UserProfileService>();
 
+builder.Services.AddScoped<UserAccountService>();
 
 builder.Services.Configure<CryptoOptions>(builder.Configuration.GetSection("Crypto"));
 builder.Services.AddSingleton<EncryptionService>();
+builder.Services.AddHttpContextAccessor();
+
 
 var app = builder.Build();
 
@@ -72,10 +65,10 @@ app.UseForwardedHeaders();
 
 app.UseRouting();
 
-// IMPORTANT: Session trebuie să fie înainte de Authorization (ca filtrul să poată citi Status2FA)
 app.UseSession();
 
-app.UseAuthentication();
+// IMPORTANT: nu mai folosim Windows Negotiate
+// app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(

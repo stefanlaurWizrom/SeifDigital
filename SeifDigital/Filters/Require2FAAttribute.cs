@@ -8,26 +8,34 @@ namespace SeifDigital.Filters
         public void OnAuthorization(AuthorizationFilterContext context)
         {
             var http = context.HttpContext;
+            var path = (http.Request.Path.Value ?? "").ToLowerInvariant();
 
-            // Permitem acces liber la Auth (unde e pagina de 2FA) + resurse statice
-            var path = http.Request.Path.Value?.ToLowerInvariant() ?? "";
-            if (path.StartsWith("/auth") || path.StartsWith("/css") || path.StartsWith("/js") || path.StartsWith("/lib"))
+            // Root
+            if (path == "/" || string.IsNullOrWhiteSpace(path))
                 return;
 
-            // Dacă nu e autentificat (Windows auth n-ar trebui să fie null, dar e ok ca safety)
-            if (http.User?.Identity?.IsAuthenticated != true)
-            {
-                context.Result = new RedirectToRouteResult(new { controller = "Auth", action = "Verificare2FA" });
+            // Static & system
+            if (path.StartsWith("/css") || path.StartsWith("/js") || path.StartsWith("/lib") ||
+                path.StartsWith("/favicon") || path.StartsWith("/images") ||
+                path == "/robots.txt" || path.StartsWith("/.well-known"))
                 return;
-            }
 
-            // REGULA IMPORTANTĂ: dacă 2FA nu e validat, blocăm orice pagină
-            var ok2fa = http.Session.GetString("Status2FA");
-            if (ok2fa != "Validat")
-            {
-                context.Result = new RedirectToRouteResult(new { controller = "Auth", action = "Verificare2FA" });
+            // Error pages (IMPORTANT)
+            if (path.StartsWith("/error") || path.StartsWith("/home/error"))
                 return;
-            }
+
+            // Login / 2FA / Logout
+            if (path.StartsWith("/account"))
+                return;
+
+            // 2FA ok?
+            if (http.Session.GetString("Status2FA") == "Validat")
+                return;
+
+            // Redirect to login
+            context.Result = new RedirectToRouteResult(
+                new { controller = "Account", action = "Login" }
+            );
         }
     }
 }

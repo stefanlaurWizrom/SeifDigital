@@ -2,7 +2,6 @@
 using Microsoft.EntityFrameworkCore;
 using SeifDigital.Data;
 using SeifDigital.Services;
-using System.Security.Principal;
 
 namespace SeifDigital.Controllers
 {
@@ -17,28 +16,21 @@ namespace SeifDigital.Controllers
             _settings = settings;
         }
 
-        // ✅ Domain Admins = grup cu RID 512 => SID se termină cu "-512"
-        private bool IsDomainAdmin()
+        // ✅ Nou: admin = flag în sesiune (setat după 2FA)
+        private bool IsAuditAdmin()
         {
-            try
-            {
-                var wi = User?.Identity as WindowsIdentity;
-                if (wi?.Groups == null) return false;
-
-                foreach (var g in wi.Groups)
-                {
-                    var sid = g?.Value;
-                    if (!string.IsNullOrWhiteSpace(sid) && sid.EndsWith("-512"))
-                        return true;
-                }
-            }
-            catch
-            {
-                // dacă ceva pică, mai bine blocăm accesul decât să-l permitem
+            // trebuie să fie logat + 2FA validat
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
                 return false;
-            }
 
-            return false;
+            // setat de AccountController după Verify2FA
+            return HttpContext.Session.GetString("IsAdmin") == "1";
+        }
+
+        private IActionResult NoAccess()
+        {
+            TempData["AccessDenied"] = "Nu aveți acces la această secțiune a aplicației.";
+            return RedirectToAction("Index", "Home");
         }
 
         [HttpGet]
@@ -50,9 +42,9 @@ namespace SeifDigital.Controllers
             DateTime? fromUtc,
             DateTime? toUtc)
         {
-            // 🔒 protecție: doar Domain Admins
-            if (!IsDomainAdmin())
-                return Forbid();
+            // 🔒 protecție: doar admin
+            if (!IsAuditAdmin())
+                return NoAccess();
 
             var q = _db.AuditLogs.AsNoTracking().AsQueryable();
 
@@ -79,7 +71,7 @@ namespace SeifDigital.Controllers
                 .Take(200)
                 .ToListAsync();
 
-            // păstrăm filtrele în ViewBag pentru a rămâne în UI
+            // păstrăm filtrele în ViewBag
             ViewBag.ActorUser = actorUser;
             ViewBag.EventType = eventType;
             ViewBag.Outcome = outcome;
@@ -91,13 +83,13 @@ namespace SeifDigital.Controllers
         }
 
         // =========================
-        // B11: Settings (Retention)
+        // Settings (Retention)
         // =========================
         [HttpGet]
         public async Task<IActionResult> Settings()
         {
-            if (!IsDomainAdmin())
-                return Forbid();
+            if (!IsAuditAdmin())
+                return NoAccess();
 
             var days = await _settings.GetIntAsync("AuditRetentionDays", 90);
 
@@ -113,8 +105,8 @@ namespace SeifDigital.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SettingsSave(int auditRetentionDays)
         {
-            if (!IsDomainAdmin())
-                return Forbid();
+            if (!IsAuditAdmin())
+                return NoAccess();
 
             // safety clamp
             if (auditRetentionDays < 7) auditRetentionDays = 7;

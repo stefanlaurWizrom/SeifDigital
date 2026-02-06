@@ -3,54 +3,75 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - SeifDigital</title>
+    <title>@ViewData["Title"] - WizVault</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/SeifDigital.styles.css" asp-append-version="true" />
 </head>
 <body>
+    @{
+        // Logged = doar după 2FA validat
+        var isLogged = (Context.Session.GetString("Status2FA") == "Validat");
+        var loginEmail = Context.Session.GetString("LoginEmail");
+    }
+
     <header>
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
             <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">SeifDigital</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
+                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">
+                    <span class="brand-title">WizVault</span>
+                    <small class="brand-sub text-muted d-block">by Wizrom Software</small>
+                </a>
+
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse"
+                        aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
+
                 <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-controller="Home" asp-action="Index">Parole</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Notes" asp-action="Index">Notes</a>
-                        </li>
 
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-controller="Audit" asp-action="Index">Audit</a>
-                        </li>
+                    @* Meniul apare doar după login *@
+                    @if (isLogged && !string.IsNullOrWhiteSpace(loginEmail))
+                    {
+                        <ul class="navbar-nav flex-grow-1">
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="Home" asp-action="Index">Parole</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="Notes" asp-action="Index">Notes</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="Audit" asp-action="Index">Audit</a>
+                            </li>
+                        </ul>
 
-                    </ul>
-                    <div class="d-flex align-items-center ms-auto">
-                        <p class="nav navbar-text mb-0 me-2">
-                            Hello, <b>@User.Identity?.Name</b>!
-                        </p>
+                        <div class="d-flex align-items-center ms-auto">
+                            <p class="nav navbar-text mb-0 me-2">
+                                Hello, <b>@loginEmail</b>!
+                            </p>
 
-                        <form asp-controller="Auth"
-                              asp-action="Logout"
-                              method="post"
-                              class="mb-0">
-                            @Html.AntiForgeryToken()
-                            <button type="submit" class="btn btn-sm btn-outline-secondary">
-                                Logout
-                            </button>
-                        </form>
-                    </div>
+                            <form asp-controller="Account"
+                                  asp-action="Logout"
+                                  method="post"
+                                  class="mb-0">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                    Logout
+                                </button>
+                            </form>
+                        </div>
+                    }
+                    else
+                    {
+                        @* păstrăm spațiu gol pentru layout bootstrap *@
+                        <ul class="navbar-nav flex-grow-1"></ul>
+                    }
 
                 </div>
             </div>
         </nav>
     </header>
+
     <div class="container">
         <main role="main" class="pb-3">
             @RenderBody()
@@ -59,12 +80,41 @@
 
     <footer class="border-top footer text-muted">
         <div class="container">
-            &copy; 2026 - SeifDigital - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+            &copy; 2026 - WizVault <small class="text-muted">by Wizrom Software</small> -
+            <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
         </div>
     </footer>
+
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
+
+    @if (TempData["AccessDenied"] != null)
+    {
+        <div class="modal fade show" id="accessDeniedModal" tabindex="-1"
+             style="display:block; background: rgba(0,0,0,.4);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">Acces restricționat</h5>
+                    </div>
+                    <div class="modal-body">
+                        <p>@TempData["AccessDenied"]</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" type="button" onclick="closeAccessDenied()">OK</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function closeAccessDenied() {
+                const m = document.getElementById('accessDeniedModal');
+                if (m) m.remove();
+            }
+        </script>
+    }
 </body>
 </html>

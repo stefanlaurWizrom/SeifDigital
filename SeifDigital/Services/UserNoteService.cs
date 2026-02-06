@@ -13,19 +13,22 @@ namespace SeifDigital.Services
             _db = db;
         }
 
-        public async Task<(List<UserNote> Items, int TotalCount)> SearchForUserAsync(
-            string ownerUser,
+        public async Task<(List<UserNote> Items, int TotalCount)> SearchForOwnerKeyAsync(
+            string ownerKey,
             string? q,
             int page,
             int pageSize)
         {
+            if (string.IsNullOrWhiteSpace(ownerKey))
+                return (new List<UserNote>(), 0);
+
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 25;
             if (pageSize > 100) pageSize = 100;
 
             var query = _db.UserNotes
                 .AsNoTracking()
-                .Where(x => x.OwnerUser == ownerUser);
+                .Where(x => x.OwnerKey == ownerKey);
 
             if (!string.IsNullOrWhiteSpace(q))
             {
@@ -44,9 +47,9 @@ namespace SeifDigital.Services
             return (items, total);
         }
 
-        public async Task AddAsync(string ownerUser, string text)
+        public async Task AddAsync(string ownerKey, string ownerUser, string text)
         {
-            if (string.IsNullOrWhiteSpace(ownerUser)) return;
+            if (string.IsNullOrWhiteSpace(ownerKey)) return;
             if (string.IsNullOrWhiteSpace(text)) return;
 
             text = text.Trim();
@@ -54,7 +57,8 @@ namespace SeifDigital.Services
 
             var note = new UserNote
             {
-                OwnerUser = ownerUser,
+                OwnerKey = ownerKey,
+                OwnerUser = ownerUser ?? "",
                 Text = text,
                 CreatedUtc = DateTime.UtcNow,
                 UpdatedUtc = DateTime.UtcNow
@@ -64,10 +68,12 @@ namespace SeifDigital.Services
             await _db.SaveChangesAsync();
         }
 
-        public async Task DeleteAsync(long id, string ownerUser)
+        public async Task DeleteAsync(long id, string ownerKey)
         {
+            if (string.IsNullOrWhiteSpace(ownerKey)) return;
+
             var n = await _db.UserNotes
-                .FirstOrDefaultAsync(x => x.Id == id && x.OwnerUser == ownerUser);
+                .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
 
             if (n == null) return;
 

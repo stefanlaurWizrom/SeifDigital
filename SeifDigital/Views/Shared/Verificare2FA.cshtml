@@ -4,7 +4,9 @@
 
 <div class="text-center">
     <h2>Verificare 2FA</h2>
-    <p>Cere un cod de securitate pe emailul tău de domeniu, apoi introdu-l mai jos.</p>
+    <p>
+        Cere un cod de securitate pe emailul tău de domeniu, apoi introdu-l mai jos.
+    </p>
 
     @* DEBUG (opțional): arătăm userul Windows *@
     @if (ViewBag.DebugUser != null && !string.IsNullOrWhiteSpace((string)ViewBag.DebugUser))
@@ -22,7 +24,7 @@
         </div>
     }
 
-    @* Eroare: AD/Smtp/Cooldown etc *@
+    @* Eroare: AD / SMTP / Cooldown etc *@
     @if (ViewBag.Mesaj != null)
     {
         <div class="alert alert-danger" style="max-width:520px; margin: 12px auto;">
@@ -30,11 +32,15 @@
         </div>
     }
 
-    @* Buton: trimite cod (B9) *@
-    <form asp-controller="Auth" asp-action="TrimiteCod" method="post" style="max-width:520px; margin: 0 auto 14px auto;">
+    @* === BUTON: TRIMITE COD (Windows / AD) === *@
+    <form asp-controller="Auth"
+          asp-action="TrimiteCod"
+          method="post"
+          style="max-width:520px; margin: 0 auto 14px auto;">
         @Html.AntiForgeryToken()
+
         <button type="submit"
-                class="btn btn-primary"
+                class="btn btn-primary w-100"
                 id="btnTrimiteCod">
             Trimite cod pe email
         </button>
@@ -48,7 +54,11 @@
         </p>
     }
 
-    <form asp-controller="Auth" asp-action="VerificaCod" method="post" style="max-width:520px; margin: 0 auto;">
+    @* === INTRODUCERE COD === *@
+    <form asp-controller="Auth"
+          asp-action="VerificaCod"
+          method="post"
+          style="max-width:520px; margin: 0 auto;">
         @Html.AntiForgeryToken()
 
         <div class="mb-3">
@@ -62,13 +72,28 @@
                    required />
         </div>
 
-        <button type="submit" class="btn btn-success">
-            Verifică și Intră în Seif
+        <button type="submit" class="btn btn-success w-100">
+            Verifică și Intră în WizVault
         </button>
     </form>
-    
 
+    @* === LOGIN EXTERN (email @wizrom.ro) === *@
+    <hr style="max-width:520px; margin: 20px auto;" />
+
+    <div style="max-width:520px; margin: 0 auto;">
+        <div class="alert alert-secondary">
+            Dacă nu ești autentificat prin Windows (ex: stație externă),
+            poți folosi autentificarea externă pe email.
+        </div>
+
+        <a class="btn btn-outline-dark w-100"
+           asp-controller="ExternalAuth"
+           asp-action="Login">
+            LoginExtern
+        </a>
+    </div>
 </div>
+
 @section Scripts {
     <script>
         (function () {
@@ -77,19 +102,15 @@
 
             // căutăm mesajul de cooldown (~xx secunde)
             const infoAlerts = document.querySelectorAll(".alert-info, .alert-danger");
-
             let seconds = null;
 
             infoAlerts.forEach(a => {
                 const m = a.textContent.match(/~\s*(\d+)\s*sec/i);
-                if (m) {
-                    seconds = parseInt(m[1], 10);
-                }
+                if (m) seconds = parseInt(m[1], 10);
             });
 
             if (!seconds || seconds <= 0) return;
 
-            // dezactivăm butonul
             btn.disabled = true;
             const originalText = "Trimite cod pe email";
 
@@ -99,7 +120,6 @@
                     btn.textContent = originalText;
                     return;
                 }
-
                 btn.textContent = `Trimite cod (${seconds}s)`;
                 seconds--;
                 setTimeout(tick, 1000);
