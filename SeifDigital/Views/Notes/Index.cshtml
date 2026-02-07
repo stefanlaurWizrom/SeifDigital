@@ -16,6 +16,8 @@
 }
 
 <div class="container mt-4" style="max-width:1100px;">
+    @Html.AntiForgeryToken()
+
     <h2>Note</h2>
     <p class="text-muted">Note personale (max 255 caractere). Vizibile doar ție.</p>
 
@@ -76,13 +78,20 @@
                     <div class="list-group-item d-flex justify-content-between align-items-start">
                         <div class="me-3" style="white-space:pre-wrap">@n.Text</div>
 
-                        <div class="text-end" style="min-width:160px;">
+                        <div class="text-end" style="min-width:200px;">
                             <div class="text-muted small">@n.UpdatedUtc.ToString("yyyy-MM-dd HH:mm")</div>
+
+                            @* NOU: Trimite -> deschide modal *@
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary mt-2 w-100"
+                                    onclick="openSendNoteModal(@n.Id)">
+                                Trimite
+                            </button>
 
                             <form asp-action="Delete" method="post" class="mt-2">
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="id" value="@n.Id" />
-                                <button class="btn btn-sm btn-outline-danger" type="submit">Șterge</button>
+                                <button class="btn btn-sm btn-outline-danger w-100" type="submit">Șterge</button>
                             </form>
                         </div>
                     </div>
@@ -126,3 +135,56 @@
         </div>
     </div>
 </div>
+
+@* Modal: Trimite notă către alt user *@
+<div class="modal fade" id="sendNoteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="Notes" asp-action="Send" method="post" class="mb-0">
+                @Html.AntiForgeryToken()
+
+                <div class="modal-header">
+                    <h5 class="modal-title">Trimite nota</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="sendNoteId" value="" />
+
+                    <label class="form-label">Email destinatar</label>
+                    <input type="text"
+                           class="form-control"
+                           name="recipientEmail"
+                           id="sendNoteRecipientEmail"
+                           placeholder="ex: coleg@wizrom.ro"
+                           required />
+                    <div class="form-text">Introdu emailul utilizatorului din WizVault.</div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Renunță</button>
+                    <button type="submit" class="btn btn-primary">Trimite</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function openSendNoteModal(id) {
+            const hiddenId = document.getElementById("sendNoteId");
+            const emailInput = document.getElementById("sendNoteRecipientEmail");
+
+            if (hiddenId) hiddenId.value = id;
+            if (emailInput) {
+                emailInput.value = "";
+                setTimeout(() => emailInput.focus(), 150);
+            }
+
+            const modalEl = document.getElementById("sendNoteModal");
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+    </script>
+}

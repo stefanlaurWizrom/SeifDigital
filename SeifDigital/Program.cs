@@ -57,11 +57,10 @@ builder.Services.Configure<CryptoOptions>(builder.Configuration.GetSection("Cryp
 builder.Services.AddSingleton<EncryptionService>();
 builder.Services.AddHttpContextAccessor();
 
-
 var app = builder.Build();
 
-app.UseStaticFiles();
 app.UseForwardedHeaders();
+app.UseStaticFiles();
 
 app.UseRouting();
 
@@ -70,6 +69,50 @@ app.UseSession();
 // IMPORTANT: nu mai folosim Windows Negotiate
 // app.UseAuthentication();
 app.UseAuthorization();
+
+// ✅ NO-CACHE global pentru pagini HTML (rezolvă “Back” după Logout în IIS)
+app.Use(async (context, next) =>
+{
+    // setăm headerele chiar înainte să se trimită răspunsul (mai sigur decât după next)
+    context.Response.OnStarting(() =>
+    {
+        var path = (context.Request.Path.Value ?? "").ToLowerInvariant();
+
+        // Nu afecta fișierele statice (css/js/lib/etc.)
+        bool isStatic =
+            path.StartsWith("/css/") ||
+            path.StartsWith("/js/") ||
+            path.StartsWith("/lib/") ||
+            path.StartsWith("/favicon") ||
+            path == "/robots.txt" ||
+            path.StartsWith("/images/") ||
+            path.EndsWith(".css") ||
+            path.EndsWith(".js") ||
+            path.EndsWith(".png") ||
+            path.EndsWith(".jpg") ||
+            path.EndsWith(".jpeg") ||
+            path.EndsWith(".gif") ||
+            path.EndsWith(".svg") ||
+            path.EndsWith(".webp") ||
+            path.EndsWith(".ico");
+
+        if (!isStatic)
+        {
+            // doar pentru răspunsuri de tip HTML (view-uri)
+            var contentType = context.Response.ContentType ?? "";
+            if (string.IsNullOrWhiteSpace(contentType) || contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+                context.Response.Headers["Pragma"] = "no-cache";
+                context.Response.Headers["Expires"] = "0";
+            }
+        }
+
+        return Task.CompletedTask;
+    });
+
+    await next();
+});
 
 app.MapControllerRoute(
     name: "default",

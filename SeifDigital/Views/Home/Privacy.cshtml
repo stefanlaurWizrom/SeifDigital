@@ -1,6 +1,83 @@
 ﻿@{
     ViewData["Title"] = "Privacy Policy";
 }
-<h1>@ViewData["Title"]</h1>
+<h1>Politica de confidențialitate – WizVault</h1>
 
-<p>Use this page to detail your site's privacy policy.</p>
+<p>
+    WizVault este o aplicație internă destinată utilizatorilor autorizați din cadrul organizației, având ca scop gestionarea
+    securizată a informațiilor sensibile (parole și notițe), precum și controlul și auditarea accesului la acestea.
+</p>
+
+<h2>1. Tipuri de date prelucrate</h2>
+<p>În cadrul utilizării aplicației WizVault sunt prelucrate următoarele categorii de date:</p>
+<ul>
+    <li>adresa de email a utilizatorului, utilizată pentru identificare și autentificare;</li>
+    <li>date de autentificare în formă securizată (parolele nu sunt stocate în clar);</li>
+    <li>coduri temporare utilizate pentru autentificarea în doi pași (2FA) prin email;</li>
+    <li>
+        date de audit privind utilizarea aplicației, inclusiv:
+        <ul>
+            <li>utilizatorul care a efectuat acțiunea;</li>
+            <li>tipul acțiunii;</li>
+            <li>data și ora;</li>
+            <li>adresa IP;</li>
+            <li>informații despre aplicația client (User Agent);</li>
+        </ul>
+    </li>
+    <li>informații introduse de utilizatori în aplicație (parole și notițe), stocate în format protejat.</li>
+</ul>
+
+<h2>2. Scopul prelucrării</h2>
+<p>Datele sunt prelucrate exclusiv în scopuri legate de:</p>
+<ul>
+    <li>autentificarea utilizatorilor și securizarea accesului (inclusiv autentificare în doi pași);</li>
+    <li>prevenirea accesului neautorizat și detectarea incidentelor de securitate;</li>
+    <li>asigurarea trasabilității prin jurnalizare și audit;</li>
+    <li>administrarea și operarea aplicației.</li>
+</ul>
+
+<h2>3. Stocarea datelor</h2>
+<p>
+    Datele sunt stocate în baza de date SQL configurată pentru această instanță a aplicației și pe serverul pe care rulează
+    aplicația (IIS), în infrastructura internă a organizației.
+</p>
+<p>
+    Aplicația nu transmite datele către sisteme externe, cu excepția serviciului de email utilizat pentru transmiterea
+    codurilor de autentificare în doi pași.
+</p>
+
+<h2>4. Securitatea datelor</h2>
+<p>Pentru protejarea datelor, WizVault utilizează următoarele măsuri:</p>
+<ul>
+    <li>autentificare pe bază de email și parolă;</li>
+    <li>autentificare în doi pași (2FA) prin email;</li>
+    <li>restricționarea accesului la utilizatori din domenii de email permise;</li>
+    <li>stocarea securizată a datelor sensibile (mecanisme de hash și criptare);</li>
+    <li>jurnalizare detaliată a accesului și acțiunilor utilizatorilor.</li>
+</ul>
+
+<h2>5. Cookie-uri</h2>
+<p>Aplicația utilizează exclusiv cookie-uri strict necesare funcționării:</p>
+<ul>
+    <li>cookie de autentificare și sesiune;</li>
+    <li>cookie anti-forgery utilizat pentru protecția împotriva atacurilor CSRF.</li>
+</ul>
+<p>Nu sunt utilizate cookie-uri de analiză, marketing sau tracking.</p>
+
+<h2>6. Perioada de retenție</h2>
+<p>
+    Datele sunt păstrate conform politicilor interne ale organizației și configurației aplicației.
+    Codurile de autentificare în doi pași sunt temporare și expiră automat.
+    Datele de audit sunt păstrate pe perioada necesară îndeplinirii scopurilor de securitate și conformitate internă.
+</p>
+
+<h2>7. Acces și responsabilitate</h2>
+<p>
+    Accesul la date este limitat la utilizatorii autorizați și la administratorii aplicației, definiți în sistem.
+</p>
+
+<h2>8. Contact</h2>
+<p>
+    Pentru întrebări sau solicitări legate de confidențialitatea datelor, utilizatorii se pot adresa administratorului
+    aplicației sau echipei IT responsabile.
+</p>

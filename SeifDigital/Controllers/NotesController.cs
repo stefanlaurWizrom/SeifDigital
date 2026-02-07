@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using SeifDigital.Services;
 using SeifDigital.Utils;
+using SeifDigital.Data;
+using Microsoft.EntityFrameworkCore;
+
 
 namespace SeifDigital.Controllers
 {
@@ -8,12 +11,16 @@ namespace SeifDigital.Controllers
     {
         private readonly UserNoteService _notes;
         private readonly AuditService _audit;
+        private readonly ApplicationDbContext _db;
 
-        public NotesController(UserNoteService notes, AuditService audit)
+
+        public NotesController(UserNoteService notes, AuditService audit, ApplicationDbContext db)
         {
             _notes = notes;
             _audit = audit;
+            _db = db;
         }
+
 
         [HttpGet]
         public async Task<IActionResult> Index(string? q, int page = 1)
@@ -84,5 +91,69 @@ namespace SeifDigital.Controllers
 
             return RedirectToAction(nameof(Index));
         }
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Send(long id, string recipientEmail)
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction("Login", "Account");
+
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
+            var senderEmail = (HttpContext.Session.GetString("LoginEmail") ?? ownerKey ?? "").Trim();
+
+            recipientEmail = (recipientEmail ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(recipientEmail))
+            {
+                TempData["AccessDenied"] = "Te rog introdu un email destinatar.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var recipientExists = await _db.UserAccounts.AsNoTracking()
+                .AnyAsync(x => x.Email.ToLower() == recipientEmail);
+
+            if (!recipientExists)
+            {
+                TempData["AccessDenied"] = "Destinatarul nu există în aplicație.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var note = await _db.UserNotes.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
+
+            if (note == null)
+            {
+                TempData["AccessDenied"] = "Nota nu există sau nu îți aparține.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var msg = new SeifDigital.Models.UserMessage
+            {
+                RecipientOwnerKey = recipientEmail,
+                SenderEmail = senderEmail,
+                SourceType = "Notes",
+                OriginalId = note.Id,
+                CreatedUtc = DateTime.UtcNow,
+
+                NoteText = note.Text
+            };
+
+            _db.UserMessages.Add(msg);
+            await _db.SaveChangesAsync();
+
+            _audit.Log(HttpContext, "Message.Send", "Success",
+                targetType: "UserMessage",
+                targetId: msg.Id.ToString(),
+                details: new
+                {
+                    sourceType = "Notes",
+                    messageId = msg.Id,
+                    originalId = id,
+                    from = senderEmail,
+                    to = recipientEmail,
+                    createdUtc = msg.CreatedUtc
+                });
+            return RedirectToAction(nameof(Index));
+        }
+
     }
 }

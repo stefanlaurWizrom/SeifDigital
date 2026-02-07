@@ -10,13 +10,18 @@
 </head>
 <body>
     @{
-        // Logged = doar după 2FA validat
         var isLogged = (Context.Session.GetString("Status2FA") == "Validat");
         var loginEmail = Context.Session.GetString("LoginEmail");
+
+        var currentController = (ViewContext.RouteData.Values["controller"]?.ToString() ?? "").ToLowerInvariant();
+        string active(string c) => currentController == (c ?? "").ToLowerInvariant() ? "active fw-semibold" : "";
     }
 
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+        <nav id="mainNavbar"
+             class="navbar navbar-expand-sm navbar-light bg-white border-bottom fixed-top shadow-sm navbar-compact">
+
+
             <div class="container-fluid">
                 <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">
                     <span class="brand-title">WizVault</span>
@@ -30,23 +35,32 @@
 
                 <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
 
-                    @* Meniul apare doar după login *@
                     @if (isLogged && !string.IsNullOrWhiteSpace(loginEmail))
                     {
                         <ul class="navbar-nav flex-grow-1">
                             <li class="nav-item">
-                                <a class="nav-link text-dark" asp-controller="Home" asp-action="Index">Parole</a>
+                                <a class="nav-link text-dark @active("Home")" asp-controller="Home" asp-action="Index">Parole</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link text-dark" asp-controller="Notes" asp-action="Index">Notes</a>
+                                <a class="nav-link text-dark @active("Notes")" asp-controller="Notes" asp-action="Index">Notes</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link text-dark" asp-controller="Audit" asp-action="Index">Audit</a>
+                                <a class="nav-link text-dark @active("Mesaje")" asp-controller="Mesaje" asp-action="Index">Mesaje</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark @active("Audit")" asp-controller="Audit" asp-action="Index">Audit</a>
                             </li>
                         </ul>
 
-                        <div class="d-flex align-items-center ms-auto">
-                            <p class="nav navbar-text mb-0 me-2">
+                        <div class="d-flex align-items-center ms-auto gap-2">
+                            <button id="btnTheme"
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    title="Schimbă tema">
+                                🌙
+                            </button>
+
+                            <p class="nav navbar-text mb-0 me-1">
                                 Hello, <b>@loginEmail</b>!
                             </p>
 
@@ -63,7 +77,6 @@
                     }
                     else
                     {
-                        @* păstrăm spațiu gol pentru layout bootstrap *@
                         <ul class="navbar-nav flex-grow-1"></ul>
                     }
 
@@ -116,5 +129,13 @@
             }
         </script>
     }
+    <script>
+    // Fix Back / Forward Cache (IIS + Chrome/Edge)
+    window.addEventListener("pageshow", function (event) {
+        if (event.persisted) {
+            window.location.reload();
+        }
+    });
+    </script>
 </body>
 </html>

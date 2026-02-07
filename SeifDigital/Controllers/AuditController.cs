@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using SeifDigital.Data;
 using SeifDigital.Services;
+using System.Text;
 
 namespace SeifDigital.Controllers
 {
@@ -16,14 +17,11 @@ namespace SeifDigital.Controllers
             _settings = settings;
         }
 
-        // ✅ Nou: admin = flag în sesiune (setat după 2FA)
         private bool IsAuditAdmin()
         {
-            // trebuie să fie logat + 2FA validat
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
                 return false;
 
-            // setat de AccountController după Verify2FA
             return HttpContext.Session.GetString("IsAdmin") == "1";
         }
 
@@ -33,8 +31,7 @@ namespace SeifDigital.Controllers
             return RedirectToAction("Index", "Home");
         }
 
-        [HttpGet]
-        public async Task<IActionResult> Index(
+        private IQueryable<SeifDigital.Models.AuditLog> BuildQuery(
             string? actorUser,
             string? eventType,
             string? outcome,
@@ -42,10 +39,6 @@ namespace SeifDigital.Controllers
             DateTime? fromUtc,
             DateTime? toUtc)
         {
-            // 🔒 protecție: doar admin
-            if (!IsAuditAdmin())
-                return NoAccess();
-
             var q = _db.AuditLogs.AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(actorUser))
@@ -66,12 +59,43 @@ namespace SeifDigital.Controllers
             if (toUtc.HasValue)
                 q = q.Where(x => x.EventTimeUtc <= toUtc.Value);
 
+            return q;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Index(
+            string? actorUser,
+            string? eventType,
+            string? outcome,
+            string? targetId,
+            DateTime? fromUtc,
+            DateTime? toUtc,
+            int page = 1)
+        {
+            if (!IsAuditAdmin())
+                return NoAccess();
+
+            const int pageSize = 25;
+
+            var retentionDays = await _settings.GetIntAsync("AuditRetentionDays", 90);
+            if (retentionDays < 7) retentionDays = 7;
+            if (retentionDays > 3650) retentionDays = 3650;
+
+            var q = BuildQuery(actorUser, eventType, outcome, targetId, fromUtc, toUtc);
+
+            var total = await q.CountAsync();
+
+            var totalPages = (int)Math.Ceiling(total / (double)pageSize);
+            if (totalPages < 1) totalPages = 1;
+            if (page < 1) page = 1;
+            if (page > totalPages) page = totalPages;
+
             var rows = await q
                 .OrderByDescending(x => x.EventTimeUtc)
-                .Take(200)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
-            // păstrăm filtrele în ViewBag
             ViewBag.ActorUser = actorUser;
             ViewBag.EventType = eventType;
             ViewBag.Outcome = outcome;
@@ -79,7 +103,101 @@ namespace SeifDigital.Controllers
             ViewBag.FromUtc = fromUtc?.ToString("yyyy-MM-ddTHH:mm");
             ViewBag.ToUtc = toUtc?.ToString("yyyy-MM-ddTHH:mm");
 
+            ViewBag.Page = page;
+            ViewBag.PageSize = pageSize;
+            ViewBag.Total = total;
+            ViewBag.TotalPages = totalPages;
+
+            ViewBag.RetentionDays = retentionDays;
+
             return View(rows);
+        }
+
+        // =========================
+        // Export CSV (max 5000 rows)
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> ExportCsv(
+            string? actorUser,
+            string? eventType,
+            string? outcome,
+            string? targetId,
+            DateTime? fromUtc,
+            DateTime? toUtc)
+        {
+            if (!IsAuditAdmin())
+                return NoAccess();
+
+            var q = BuildQuery(actorUser, eventType, outcome, targetId, fromUtc, toUtc);
+
+            var rows = await q
+                .OrderByDescending(x => x.EventTimeUtc)
+                .Take(5000)
+                .ToListAsync();
+
+            var sb = new StringBuilder();
+            sb.AppendLine("EventTimeUtc,EventType,ActorUser,TargetType,TargetId,Outcome,ClientIp,CorrelationId,Reason,UserAgent,DetailsJson");
+
+            string esc(string? s)
+            {
+                s ??= "";
+                s = s.Replace("\"", "\"\"");
+                return $"\"{s}\"";
+            }
+
+            foreach (var x in rows)
+            {
+                sb.Append(esc(x.EventTimeUtc.ToString("yyyy-MM-dd HH:mm:ss"))).Append(",");
+                sb.Append(esc(x.EventType)).Append(",");
+                sb.Append(esc(x.ActorUser)).Append(",");
+                sb.Append(esc(x.TargetType)).Append(",");
+                sb.Append(esc(x.TargetId)).Append(",");
+                sb.Append(esc(x.Outcome)).Append(",");
+                sb.Append(esc(x.ClientIp)).Append(",");
+                sb.Append(esc(x.CorrelationId)).Append(",");
+                sb.Append(esc(x.Reason)).Append(",");
+                sb.Append(esc(x.UserAgent)).Append(",");
+                sb.Append(esc(x.DetailsJson)).AppendLine();
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            return File(bytes, "text/csv; charset=utf-8", $"audit_{DateTime.UtcNow:yyyyMMdd_HHmm}.csv");
+        }
+
+        // =========================
+        // Export "PDF" via print-friendly HTML
+        // (user prints to PDF in browser)
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> ExportPdf(
+            string? actorUser,
+            string? eventType,
+            string? outcome,
+            string? targetId,
+            DateTime? fromUtc,
+            DateTime? toUtc)
+        {
+            if (!IsAuditAdmin())
+                return NoAccess();
+
+            var q = BuildQuery(actorUser, eventType, outcome, targetId, fromUtc, toUtc);
+
+            var rows = await q
+                .OrderByDescending(x => x.EventTimeUtc)
+                .Take(1000)
+                .ToListAsync();
+
+            ViewBag.Filter = new
+            {
+                actorUser,
+                eventType,
+                outcome,
+                targetId,
+                fromUtc,
+                toUtc
+            };
+
+            return View("ExportPdf", rows);
         }
 
         // =========================
@@ -92,8 +210,6 @@ namespace SeifDigital.Controllers
                 return NoAccess();
 
             var days = await _settings.GetIntAsync("AuditRetentionDays", 90);
-
-            // safety clamp
             if (days < 7) days = 7;
             if (days > 3650) days = 3650;
 
@@ -108,7 +224,6 @@ namespace SeifDigital.Controllers
             if (!IsAuditAdmin())
                 return NoAccess();
 
-            // safety clamp
             if (auditRetentionDays < 7) auditRetentionDays = 7;
             if (auditRetentionDays > 3650) auditRetentionDays = 3650;
 

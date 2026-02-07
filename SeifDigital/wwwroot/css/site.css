@@ -1,22 +1,128 @@
-html {
-  font-size: 14px;
+﻿html {
+    font-size: 14px;
+    position: relative;
+    min-height: 100%;
 }
 
 @media (min-width: 768px) {
-  html {
-    font-size: 16px;
-  }
+    html {
+        font-size: 16px;
+    }
 }
 
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus,
+.form-control:focus, .form-check-input:focus {
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
 }
 
-html {
-  position: relative;
-  min-height: 100%;
-}
-
+/* Footer spacing */
 body {
-  margin-bottom: 60px;
+    margin-bottom: 60px;
 }
+
+/* IMPORTANT: loc pentru navbar pinned (fixed-top).
+   Daca navbar e mic (compact), 56px e suficient si nu mai “iroseste” spatiu. */
+body {
+    padding-top: 56px;
+}
+
+/* ===== Navbar behavior ===== */
+#mainNavbar {
+    transition: padding .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+    /* Navbar compact (mai mic) */
+    #mainNavbar.navbar-compact {
+        padding-top: .20rem !important;
+        padding-bottom: .20rem !important;
+    }
+
+        #mainNavbar.navbar-compact .navbar-brand {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            line-height: 1.05;
+        }
+
+        #mainNavbar.navbar-compact .brand-title {
+            font-size: 1.05rem;
+            line-height: 1.05;
+        }
+
+        #mainNavbar.navbar-compact .brand-sub {
+            font-size: .68rem;
+            line-height: 1.05;
+            margin-top: 0;
+        }
+
+        #mainNavbar.navbar-compact .nav-link {
+            padding-top: .30rem !important;
+            padding-bottom: .30rem !important;
+        }
+
+    /* Shrink + shadow on scroll (discret) */
+    #mainNavbar.navbar-scrolled {
+        box-shadow: 0 .25rem .7rem rgba(0,0,0,.12) !important;
+    }
+
+        /* Daca e si compact + scrolled, si mai fin */
+        #mainNavbar.navbar-scrolled.navbar-compact {
+            padding-top: .12rem !important;
+            padding-bottom: .12rem !important;
+        }
+
+/* Highlight active menu item */
+.navbar .nav-link.active {
+    border-bottom: 2px solid currentColor;
+}
+
+/* ===== Dark Mode ===== */
+html.theme-dark,
+html.theme-dark body {
+    background-color: #121212;
+    color: #e7e7e7;
+}
+
+    html.theme-dark .navbar {
+        background-color: #1c1c1c !important;
+        border-bottom-color: rgba(255,255,255,.12) !important;
+    }
+
+        html.theme-dark .navbar .nav-link,
+        html.theme-dark .navbar .navbar-text,
+        html.theme-dark .navbar .navbar-brand {
+            color: #e7e7e7 !important;
+        }
+
+            html.theme-dark .navbar .nav-link.active {
+                border-bottom-color: #e7e7e7;
+            }
+
+    html.theme-dark .container,
+    html.theme-dark .container-fluid {
+        color: #e7e7e7;
+    }
+
+    html.theme-dark .table {
+        color: #e7e7e7;
+    }
+
+    html.theme-dark .table-striped > tbody > tr:nth-of-type(odd) > * {
+        color: #e7e7e7;
+    }
+
+    html.theme-dark .modal-content {
+        background-color: #1c1c1c;
+        color: #e7e7e7;
+    }
+
+    html.theme-dark .form-control,
+    html.theme-dark .form-select {
+        background-color: #222;
+        color: #e7e7e7;
+        border-color: rgba(255,255,255,.2);
+    }
+
+    html.theme-dark .btn-outline-secondary {
+        border-color: rgba(255,255,255,.35);
+        color: #e7e7e7;
+    }

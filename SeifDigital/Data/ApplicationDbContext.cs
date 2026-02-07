@@ -17,6 +17,8 @@ namespace SeifDigital.Data
 
         // Login user/parola
         public DbSet<UserAccount> UserAccounts { get; set; }
+        public DbSet<UserMessage> UserMessages { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -173,6 +175,34 @@ namespace SeifDigital.Data
                     .IsRequired();
 
             });
+            // =========================
+            // UserMessage (dbo.UserMessage) - inbox
+            // =========================
+            modelBuilder.Entity<UserMessage>(e =>
+            {
+                e.ToTable("UserMessage", "dbo");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Id).HasColumnType("bigint");
+
+                e.Property(x => x.RecipientOwnerKey).HasMaxLength(256).IsRequired();
+                e.Property(x => x.SenderEmail).HasMaxLength(256).IsRequired();
+                e.Property(x => x.SourceType).HasMaxLength(20).IsRequired();
+
+                e.Property(x => x.OriginalId).HasColumnType("bigint");
+
+                e.Property(x => x.CreatedUtc).HasColumnType("datetime2(3)").IsRequired();
+                e.Property(x => x.SavedUtc).HasColumnType("datetime2(3)");
+
+                e.Property(x => x.TitluAplicatie).HasMaxLength(100);
+                e.Property(x => x.UsernameSalvat).HasMaxLength(200);
+
+                e.Property(x => x.NoteText).HasMaxLength(255);
+                e.Property(x => x.Text).HasMaxLength(255);
+
+                e.HasIndex(x => x.RecipientOwnerKey);
+                e.HasIndex(x => x.SourceType);
+            });
+
         }
     }
 }

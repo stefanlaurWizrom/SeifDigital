@@ -2,53 +2,104 @@
 
 @{
     ViewData["Title"] = "Audit Logs";
+
+    int pageNo = (int)(ViewBag.Page ?? 1);
+    int pageSize = (int)(ViewBag.PageSize ?? 25);
+    int total = (int)(ViewBag.Total ?? 0);
+    int totalPages = (int)(ViewBag.TotalPages ?? 1);
+
+    if (totalPages < 1) totalPages = 1;
+    if (pageNo < 1) pageNo = 1;
+    if (pageNo > totalPages) pageNo = totalPages;
+
+    int startItem = total == 0 ? 0 : ((pageNo - 1) * pageSize + 1);
+    int endItem = Math.Min(pageNo * pageSize, total);
+
+    string actorUser = (string)(ViewBag.ActorUser ?? "");
+    string eventType = (string)(ViewBag.EventType ?? "");
+    string outcome = (string)(ViewBag.Outcome ?? "");
+    string targetId = (string)(ViewBag.TargetId ?? "");
+    string fromUtc = (string)(ViewBag.FromUtc ?? "");
+    string toUtc = (string)(ViewBag.ToUtc ?? "");
+
+    int retentionDays = 0;
+    try { retentionDays = (int)(ViewBag.RetentionDays ?? 0); } catch { }
+
+    string esc(string s) => Uri.EscapeDataString(s ?? "");
 }
 
-<div class="container-fluid mt-4 px-4">
+<div class="container mt-4" style="max-width:1100px;">
 
     <h2>Audit Logs</h2>
-    <div class="mb-2">
+
+    @{
+        // query string pentru export (include filtrele)
+        string baseQs =
+            $"actorUser={esc(actorUser)}&eventType={esc(eventType)}&outcome={esc(outcome)}&targetId={esc(targetId)}&fromUtc={esc(fromUtc)}&toUtc={esc(toUtc)}";
+
+        string exportCsvHref = $"/Audit/ExportCsv?{baseQs}";
+        string exportPdfHref = $"/Audit/ExportPdf?{baseQs}";
+    }
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
         <a asp-controller="Audit"
            asp-action="Settings"
            class="btn btn-sm btn-outline-secondary">
             ⚙️ Audit Settings
         </a>
+
+        <a class="btn btn-sm btn-outline-primary" href="@exportCsvHref">
+            ⬇ Export CSV
+        </a>
+
+        <a class="btn btn-sm btn-outline-primary" href="@exportPdfHref" target="_blank">
+            🖨 Export PDF
+        </a>
+
+        <span class="ms-auto text-muted small">
+            @if (retentionDays > 0)
+            {
+                <text>Retention: <b>@retentionDays</b> zile</text>
+            }
+        </span>
     </div>
 
-    <p class="text-muted">Ultimele 200 intrări (filtrabile). Acces: Domain Admins.</p>
+    <div class="text-muted mb-2">
+        Afișez <b>@startItem</b> - <b>@endItem</b> din <b>@total</b> • Pagina <b>@pageNo</b> / <b>@totalPages</b>
+    </div>
 
     <form method="get" class="row g-2 mb-3">
         <div class="col-md-3">
             <input class="form-control" name="actorUser" placeholder="ActorUser"
-                   value="@ViewBag.ActorUser" />
+                   value="@actorUser" />
         </div>
 
         <div class="col-md-3">
             <input class="form-control" name="eventType" placeholder="EventType (ex: Secret.ViewPassword)"
-                   value="@ViewBag.EventType" />
+                   value="@eventType" />
         </div>
 
         <div class="col-md-2">
             <select class="form-select" name="outcome">
                 <option value="">Outcome (all)</option>
-                <option value="Success" selected="@(ViewBag.Outcome == "Success")">Success</option>
-                <option value="Fail" selected="@(ViewBag.Outcome == "Fail")">Fail</option>
+                <option value="Success" selected="@(outcome == "Success")">Success</option>
+                <option value="Fail" selected="@(outcome == "Fail")">Fail</option>
             </select>
         </div>
 
         <div class="col-md-2">
             <input class="form-control" name="targetId" placeholder="TargetId"
-                   value="@ViewBag.TargetId" />
+                   value="@targetId" />
         </div>
 
         <div class="col-md-3">
             <input class="form-control" type="datetime-local" name="fromUtc"
-                   value="@ViewBag.FromUtc" />
+                   value="@fromUtc" />
         </div>
 
         <div class="col-md-3">
             <input class="form-control" type="datetime-local" name="toUtc"
-                   value="@ViewBag.ToUtc" />
+                   value="@toUtc" />
         </div>
 
         <div class="col-md-2">
@@ -60,6 +111,13 @@
         </div>
     </form>
 
+    <style>
+        .audit-outcome { min-width: 90px; }
+        .audit-ip { max-width: 15ch; white-space: normal; word-break: break-word; }
+        .audit-ua { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .audit-event code { white-space: nowrap; }
+    </style>
+
     <div class="table-responsive">
         <table class="table table-sm table-striped align-middle small">
             <thead>
@@ -68,13 +126,10 @@
                     <th>Event</th>
                     <th>Actor</th>
                     <th>Target</th>
-                    <th>Outcome</th>
-                    <th>Reason</th>
-                    <th>IP</th>
-                    <th>UA</th>
-                    <th>Details</th>
-                    
-                    <th>Open</th>
+                    <th class="audit-outcome">Outcome</th>
+                    <th class="audit-ip">IP</th>
+                    <th class="audit-ua">UA</th>
+                    <th style="width:1%;">Open</th>
                 </tr>
             </thead>
             <tbody>
@@ -82,19 +137,13 @@
                 {
                     <tr>
                         <td>@x.EventTimeUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
-                        <td><code>@x.EventType</code></td>
+                        <td class="audit-event"><code>@x.EventType</code></td>
                         <td>@x.ActorUser</td>
                         <td>@x.TargetType @x.TargetId</td>
-                        <td>@x.Outcome</td>
-                        <td>@x.Reason</td>
-                        <td>@x.ClientIp</td>
-                        <td style="max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                            @x.UserAgent
-                        </td>
-                        <td style="max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                            @x.DetailsJson
-                        </td>
-                        
+                        <td class="audit-outcome">@x.Outcome</td>
+                        <td class="audit-ip">@x.ClientIp</td>
+                        <td class="audit-ua">@x.UserAgent</td>
+
                         <td>
                             <button type="button"
                                     class="btn btn-sm btn-outline-primary"
@@ -104,21 +153,55 @@
                                     data-actor="@x.ActorUser"
                                     data-target="@($"{x.TargetType} {x.TargetId}")"
                                     data-outcome="@x.Outcome"
-                                    data-reason="@x.Reason"
-                                    data-ip="@x.ClientIp"
+                                    data-reason="@(x.Reason ?? "")"
+                                    data-ip="@(x.ClientIp ?? "")"
                                     data-ua="@System.Net.WebUtility.HtmlEncode(x.UserAgent ?? "")"
                                     data-details="@System.Net.WebUtility.HtmlEncode(x.DetailsJson ?? "")"
-                                    data-corr="@x.CorrelationId">
+                                    data-corr="@(x.CorrelationId ?? "")">
                                 Detalii
                             </button>
                         </td>
-
                     </tr>
                 }
             </tbody>
         </table>
     </div>
+
+    @{
+        bool prevDisabled = pageNo <= 1;
+        bool nextDisabled = pageNo >= totalPages;
+
+        int prevPage = pageNo - 1;
+        int nextPage = pageNo + 1;
+
+        string prevHref = prevDisabled ? "#" : $"/Audit?{baseQs}&page={prevPage}";
+        string nextHref = nextDisabled ? "#" : $"/Audit?{baseQs}&page={nextPage}";
+    }
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div class="text-muted small">
+            Pagina <b>@pageNo</b> din <b>@totalPages</b>
+        </div>
+
+        <div class="btn-group">
+            <a class="btn btn-outline-secondary @(prevDisabled ? "disabled" : "")"
+               href="@prevHref"
+               tabindex="@(prevDisabled ? "-1" : "0")"
+               aria-disabled="@(prevDisabled ? "true" : "false")">
+                ‹ Prev
+            </a>
+
+            <a class="btn btn-outline-secondary @(nextDisabled ? "disabled" : "")"
+               href="@nextHref"
+               tabindex="@(nextDisabled ? "-1" : "0")"
+               aria-disabled="@(nextDisabled ? "true" : "false")">
+                Next ›
+            </a>
+        </div>
+    </div>
 </div>
+
+<!-- Modal Detalii -->
 <div class="modal fade" id="auditDetailsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
@@ -128,7 +211,7 @@
             </div>
 
             <div class="modal-body">
-                <dl class="row mb-0">
+                <dl class="row mb-3">
                     <dt class="col-sm-3">Time (UTC)</dt>
                     <dd class="col-sm-9" id="ad_time"></dd>
 
@@ -157,12 +240,40 @@
                     <dd class="col-sm-9">
                         <pre class="mb-0" style="white-space:pre-wrap" id="ad_ua"></pre>
                     </dd>
-
-                    <dt class="col-sm-3">Details JSON</dt>
-                    <dd class="col-sm-9">
-                        <pre class="mb-0" style="white-space:pre-wrap" id="ad_details"></pre>
-                    </dd>
                 </dl>
+
+                <hr />
+
+                <h6 class="mb-2">Audit fin (Mesaje)</h6>
+                <div class="text-muted small mb-2">Se completează automat doar pentru evenimentele de tip <code>Message.*</code>.</div>
+
+                <dl class="row mb-3">
+                    <dt class="col-sm-3">From</dt>
+                    <dd class="col-sm-9" id="ad_from">—</dd>
+
+                    <dt class="col-sm-3">To</dt>
+                    <dd class="col-sm-9" id="ad_to">—</dd>
+
+                    <dt class="col-sm-3">SourceType</dt>
+                    <dd class="col-sm-9" id="ad_source">—</dd>
+
+                    <dt class="col-sm-3">MessageId</dt>
+                    <dd class="col-sm-9" id="ad_messageId">—</dd>
+
+                    <dt class="col-sm-3">OriginalId</dt>
+                    <dd class="col-sm-9" id="ad_originalId">—</dd>
+
+                    <dt class="col-sm-3">CreatedUtc</dt>
+                    <dd class="col-sm-9" id="ad_createdUtc">—</dd>
+
+                    <dt class="col-sm-3">SavedUtc</dt>
+                    <dd class="col-sm-9" id="ad_savedUtc">—</dd>
+                </dl>
+
+                <hr />
+
+                <h6 class="mb-2">Details JSON</h6>
+                <pre class="mb-0" style="white-space:pre-wrap" id="ad_details"></pre>
             </div>
 
             <div class="modal-footer">
@@ -171,21 +282,65 @@
         </div>
     </div>
 </div>
+
 @section Scripts {
     <script>
+        function decodeHtmlEntities(str) {
+            if (!str) return "";
+            const txt = document.createElement("textarea");
+            txt.innerHTML = str;
+            return txt.value;
+        }
+
+        function setText(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val ?? "";
+        }
+
         function openAuditDetails(btn) {
             const get = (name) => btn.getAttribute(name) || "";
 
-            document.getElementById("ad_time").textContent = get("data-time");
-            document.getElementById("ad_event").textContent = get("data-event");
-            document.getElementById("ad_actor").textContent = get("data-actor");
-            document.getElementById("ad_target").textContent = get("data-target");
-            document.getElementById("ad_outcome").textContent = get("data-outcome");
-            document.getElementById("ad_reason").textContent = get("data-reason");
-            document.getElementById("ad_ip").textContent = get("data-ip");
-            document.getElementById("ad_corr").textContent = get("data-corr");
-            document.getElementById("ad_ua").textContent = get("data-ua");
-            document.getElementById("ad_details").textContent = get("data-details");
+            const detailsDecoded = decodeHtmlEntities(get("data-details"));
+            const uaDecoded = decodeHtmlEntities(get("data-ua"));
+
+            setText("ad_time", get("data-time"));
+            setText("ad_event", get("data-event"));
+            setText("ad_actor", get("data-actor"));
+            setText("ad_target", get("data-target"));
+            setText("ad_outcome", get("data-outcome"));
+            setText("ad_reason", get("data-reason"));
+            setText("ad_ip", get("data-ip"));
+            setText("ad_corr", get("data-corr"));
+            setText("ad_ua", uaDecoded);
+
+            // defaults pentru audit fin
+            setText("ad_from", "—");
+            setText("ad_to", "—");
+            setText("ad_source", "—");
+            setText("ad_messageId", "—");
+            setText("ad_originalId", "—");
+            setText("ad_createdUtc", "—");
+            setText("ad_savedUtc", "—");
+
+            let pretty = detailsDecoded || "";
+            try {
+                if (detailsDecoded) {
+                    const obj = JSON.parse(detailsDecoded);
+                    pretty = JSON.stringify(obj, null, 2);
+
+                    if (obj) {
+                        if (obj.from) setText("ad_from", obj.from);
+                        if (obj.to) setText("ad_to", obj.to);
+                        if (obj.sourceType) setText("ad_source", obj.sourceType);
+                        if (obj.messageId != null) setText("ad_messageId", String(obj.messageId));
+                        if (obj.originalId != null) setText("ad_originalId", String(obj.originalId));
+                        if (obj.createdUtc) setText("ad_createdUtc", obj.createdUtc);
+                        if (obj.savedUtc) setText("ad_savedUtc", obj.savedUtc);
+                    }
+                }
+            } catch { }
+
+            setText("ad_details", pretty);
 
             const modalEl = document.getElementById("auditDetailsModal");
             const modal = new bootstrap.Modal(modalEl);

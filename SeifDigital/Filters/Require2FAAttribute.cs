@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace SeifDigital.Filters
@@ -7,6 +8,12 @@ namespace SeifDigital.Filters
     {
         public void OnAuthorization(AuthorizationFilterContext context)
         {
+            // AllowAnonymous bypass (important pentru Privacy și alte pagini publice)
+            // Dacă acțiunea/controllerul are [AllowAnonymous], nu impunem 2FA.
+            var endpoint = context.HttpContext.GetEndpoint();
+            if (endpoint?.Metadata?.GetMetadata<IAllowAnonymous>() != null)
+                return;
+
             var http = context.HttpContext;
             var path = (http.Request.Path.Value ?? "").ToLowerInvariant();
 

@@ -1,0 +1,150 @@
+﻿@model List<SeifDigital.Models.UserMessage>
+
+@{
+    ViewData["Title"] = "Mesaje";
+}
+
+<div class="container mt-4" style="max-width:1100px;">
+    @Html.AntiForgeryToken()
+
+    <h2>Mesaje</h2>
+    <p class="text-muted">Înregistrări primite. Poți <b>Salva</b> în vault-ul tău sau <b>Șterge</b>.</p>
+
+    @if (Model == null || Model.Count == 0)
+    {
+        <p class="text-muted fst-italic">Nu ai mesaje.</p>
+    }
+    else
+    {
+        <div class="list-group">
+            @foreach (var m in Model)
+            {
+                var outId = $"outbox-{m.Id}";
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="me-3">
+                            <div class="small text-muted">
+                                De la: <b>@m.SenderEmail</b> • @m.CreatedUtc.ToString("yyyy-MM-dd HH:mm") • Tip: <b>@m.SourceType</b>
+                                @if (m.SavedUtc != null)
+                                {
+                                    <span class="badge bg-success ms-2">Salvat</span>
+                                }
+                            </div>
+
+                            @if (m.SourceType == "Parole")
+                            {
+                                <div class="mt-2">
+                                    <div><b>@m.TitluAplicatie</b></div>
+                                    <div class="text-muted">@m.UsernameSalvat</div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mt-2" style="white-space:pre-wrap">@m.NoteText</div>
+                            }
+                        </div>
+
+                        <div class="text-end" style="min-width:280px;">
+                            @if (m.SourceType == "Parole")
+                            {
+                                <button class="btn btn-sm btn-outline-secondary mb-1"
+                                        type="button"
+                                        onclick="getParola(@m.Id, '@outId')">
+                                    Arată parola
+                                </button>
+
+                                <button class="btn btn-sm btn-outline-secondary mb-1"
+                                        type="button"
+                                        onclick="copyOut('@outId')">
+                                    Copiază
+                                </button>
+
+                                <button class="btn btn-sm btn-outline-secondary mb-1"
+                                        type="button"
+                                        onclick="getDetalii(@m.Id, '@outId')">
+                                    Detalii
+                                </button>
+                            }
+
+                            <form asp-action="Save" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@m.Id" />
+                                <button class="btn btn-sm btn-outline-primary mb-1" type="submit">Salvează</button>
+                            </form>
+
+                            <form asp-action="Delete" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@m.Id" />
+                                <button class="btn btn-sm btn-outline-danger mb-1" type="submit">Șterge</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    @if (m.SourceType == "Parole")
+                    {
+                        <div class="mt-2">
+                            <textarea id="@outId"
+                          class="form-control form-control-sm"
+                          rows="2"
+                          readonly
+                          placeholder="Parola/Detalii vor apărea aici..."></textarea>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        async function postJson(url, data) {
+            // ia primul token de pe pagină (e ok)
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || "";
+            const form = new URLSearchParams();
+            for (const k in data) form.append(k, data[k]);
+            form.append("__RequestVerificationToken", token);
+
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+                body: form.toString()
+            });
+
+            return await res.json();
+        }
+
+        async function getParola(id, outId) {
+            const r = await postJson("/Mesaje/GetParolaJson", { id: id });
+            if (r.ok) {
+                const t = document.getElementById(outId);
+                if (t) t.value = r.parola || "";
+            } else {
+                alert(r.message || "Eroare");
+            }
+        }
+
+        async function getDetalii(id, outId) {
+            const r = await postJson("/Mesaje/GetDetaliiJson", { id: id });
+            if (r.ok) {
+                const t = document.getElementById(outId);
+                if (t) t.value = r.detalii || "(fără detalii)";
+            } else {
+                alert(r.message || "Eroare");
+            }
+        }
+
+        async function copyOut(outId) {
+            const t = document.getElementById(outId);
+            if (!t || !t.value) return;
+            try {
+                await navigator.clipboard.writeText(t.value);
+            } catch {
+                // fallback
+                t.focus();
+                t.select();
+                document.execCommand("copy");
+            }
+        }
+    </script>
+}

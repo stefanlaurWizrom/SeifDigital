@@ -1,0 +1,62 @@
+﻿@model List<SeifDigital.Models.AuditLog>
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Audit export</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        body {
+            padding: 18px;
+        }
+
+        table {
+            font-size: 12px;
+        }
+
+        code {
+            color: #b02a37;
+        }
+    </style>
+</head>
+<body>
+    <h4>Audit export</h4>
+    <p class="text-muted mb-3">Max 1000 rânduri. Pentru PDF: Print → Save as PDF.</p>
+
+    <table class="table table-sm table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Time (UTC)</th>
+                <th>Event</th>
+                <th>Actor</th>
+                <th>Target</th>
+                <th>Outcome</th>
+                <th>IP</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var x in Model)
+            {
+                <tr>
+                    <td>@x.EventTimeUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    <td><code>@x.EventType</code></td>
+                    <td>@x.ActorUser</td>
+                    <td>@x.TargetType @x.TargetId</td>
+                    <td>@x.Outcome</td>
+                    <td>@x.ClientIp</td>
+                    <td style="max-width:420px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@x.DetailsJson</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <script>
+        // auto open print dialog (optional)
+        window.onload = () => { window.print(); };
+    </script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using System.Data.Common;
 using SeifDigital.Models;
@@ -132,6 +133,15 @@ namespace SeifDigital.Controllers
             ViewBag.Q = q ?? "";
             return View(model);
         }
+
+        // ===== Privacy page (footer link) =====
+        [AllowAnonymous]
+        [HttpGet]
+        public IActionResult Privacy()
+        {
+            return View();
+        }
+
 
         // Salvare date (parola se salvează criptată)
         [HttpPost]
@@ -397,5 +407,74 @@ namespace SeifDigital.Controllers
 
             return RedirectToAction("Index");
         }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SendSecret(int id, string recipientEmail)
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction("Login", "Account");
+
+            string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
+            string senderEmail = (HttpContext.Session.GetString("LoginEmail") ?? ownerKey ?? "").Trim();
+
+            recipientEmail = (recipientEmail ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(recipientEmail))
+            {
+                TempData["AccessDenied"] = "Te rog introdu un email destinatar.";
+                return RedirectToAction("Index");
+            }
+
+            var recipientExists = await _context.UserAccounts.AsNoTracking()
+                .AnyAsync(x => x.Email.ToLower() == recipientEmail);
+
+            if (!recipientExists)
+            {
+                TempData["AccessDenied"] = "Destinatarul nu există în aplicație.";
+                return RedirectToAction("Index");
+            }
+
+            var item = await _context.InformatiiSensibile.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
+
+            if (item == null)
+            {
+                TempData["AccessDenied"] = "Înregistrarea nu există sau nu îți aparține.";
+                return RedirectToAction("Index");
+            }
+
+            var msg = new SeifDigital.Models.UserMessage
+            {
+                RecipientOwnerKey = recipientEmail,
+                SenderEmail = senderEmail,
+                SourceType = "Parole",
+                OriginalId = item.Id,
+                CreatedUtc = DateTime.UtcNow,
+
+                TitluAplicatie = item.TitluAplicatie,
+                UsernameSalvat = item.UsernameSalvat,
+                DateCriptate = item.DateCriptate,
+                DetaliiCriptate = item.DetaliiCriptate,
+                DetaliiTokens = item.DetaliiTokens
+            };
+
+            _context.UserMessages.Add(msg);
+            await _context.SaveChangesAsync();
+
+            _audit.Log(HttpContext, "Message.Send", "Success",
+            targetType: "UserMessage",
+            targetId: msg.Id.ToString(),
+            details: new
+            {
+                    sourceType = "Parole",
+                    messageId = msg.Id,
+                    originalId = id,
+                    from = senderEmail,
+                    to = recipientEmail,
+                    createdUtc = msg.CreatedUtc
+            });
+            return RedirectToAction("Index");
+        }
+
     }
 }

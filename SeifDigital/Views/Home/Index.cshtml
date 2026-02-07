@@ -14,7 +14,6 @@
     if (pageNo < 1) pageNo = 1;
     if (pageNo > totalPages) pageNo = totalPages;
 
-
     // compute paging and qEsc as before
     var prevDisabled = pageNo <= 1;
     var nextDisabled = pageNo >= totalPages;
@@ -23,6 +22,9 @@
     var nextPage = pageNo + 1;
     var prevHref = prevDisabled ? "#" : $"/Home?{(string.IsNullOrEmpty(qEsc) ? "" : $"q={qEsc}&")}page={prevPage}";
     var nextHref = nextDisabled ? "#" : $"/Home?{(string.IsNullOrEmpty(qEsc) ? "" : $"q={qEsc}&")}page={nextPage}";
+
+    var loginEmail = Context.Session.GetString("LoginEmail");
+    var who = !string.IsNullOrWhiteSpace(loginEmail) ? loginEmail : (User.Identity?.Name ?? "");
 }
 
 <div class="container mt-4">
@@ -32,10 +34,10 @@
     <h2 class="mb-1">Parole</h2>
 
     <div class="text-muted mb-2">
-        Logat ca: <b>@User.Identity?.Name</b>
+        Logat ca: <b>@who</b>
     </div>
 
-    <p>Aici poți salva date sensibile (parole). În SQL se salvează criptat.</p>
+    <p>Aici poti salva date sensibile (parole), care vor fi criptate dupa fiecare inregistrare salvata.</p>
 
     <hr />
 
@@ -135,7 +137,7 @@
                         <span id="pwd-@item.Id" class="text-muted" data-visible="0">••••••</span>
                     </td>
 
-                    <td class="d-flex gap-2">
+                    <td class="d-flex gap-2 flex-wrap">
                         <button type="button"
                                 class="btn btn-sm btn-outline-secondary"
                                 id="btn-@item.Id"
@@ -150,12 +152,19 @@
                             Copiază
                         </button>
 
-                        @* NOU: Detalii *@
+                        @* Detalii *@
                         <button type="button"
                                 class="btn btn-sm btn-outline-info"
                                 id="det-@item.Id"
                                 onclick="showDetalii(@item.Id)">
                             Detalii
+                        </button>
+
+                        @* NOU: Trimite -> deschide modal *@
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary"
+                                onclick="openSendModal(@item.Id)">
+                            Trimite
                         </button>
 
                         <form asp-controller="Home"
@@ -209,6 +218,40 @@
             <div class="modal-body">
                 <pre id="detaliiText" style="white-space:pre-wrap; margin:0;"></pre>
             </div>
+        </div>
+    </div>
+</div>
+
+@* Modal: Trimite către alt user *@
+<div class="modal fade" id="sendModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-controller="Home" asp-action="SendSecret" method="post" class="mb-0">
+                @Html.AntiForgeryToken()
+
+                <div class="modal-header">
+                    <h5 class="modal-title">Trimite înregistrarea</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="sendSecretId" value="" />
+
+                    <label class="form-label">Email destinatar</label>
+                    <input type="text"
+                           class="form-control"
+                           name="recipientEmail"
+                           id="sendRecipientEmail"
+                           placeholder="ex: coleg@wizrom.ro"
+                           required />
+                    <div class="form-text">Introdu emailul utilizatorului din WizVault.</div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Renunță</button>
+                    <button type="submit" class="btn btn-primary">Trimite</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -444,7 +487,7 @@
             }
         }
 
-        // ===== NOU: Arată Detalii (AJAX + modal) =====
+        // ===== Arată Detalii (AJAX + modal) =====
         async function showDetalii(id) {
             const btn = document.getElementById("det-" + id);
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
@@ -486,6 +529,22 @@
             finally {
                 if (btn) { btn.disabled = false; btn.textContent = oldText; }
             }
+        }
+
+        // ===== NOU: Trimite -> modal =====
+        function openSendModal(id) {
+            const hiddenId = document.getElementById("sendSecretId");
+            const emailInput = document.getElementById("sendRecipientEmail");
+
+            if (hiddenId) hiddenId.value = id;
+            if (emailInput) {
+                emailInput.value = "";
+                setTimeout(() => emailInput.focus(), 150);
+            }
+
+            const modalEl = document.getElementById("sendModal");
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
         }
     </script>
 }
