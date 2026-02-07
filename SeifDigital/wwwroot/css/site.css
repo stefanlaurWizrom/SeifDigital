@@ -21,108 +21,342 @@ body {
 }
 
 /* IMPORTANT: loc pentru navbar pinned (fixed-top).
-   Daca navbar e mic (compact), 56px e suficient si nu mai “iroseste” spatiu. */
+   Dacă navbar e mic (compact), 56px e suficient. */
 body {
     padding-top: 56px;
 }
 
-/* ===== Navbar behavior ===== */
-#mainNavbar {
-    transition: padding .15s ease, box-shadow .15s ease, background-color .15s ease;
+/* =========================
+   Modern polish (light)
+   ========================= */
+
+html:not(.theme-dark) body {
+    background-color: #f6f8fb;
+    color: #0f172a;
 }
 
-    /* Navbar compact (mai mic) */
-    #mainNavbar.navbar-compact {
-        padding-top: .20rem !important;
-        padding-bottom: .20rem !important;
+.btn {
+    border-radius: 12px;
+}
+
+.form-control,
+.form-select {
+    border-radius: 12px;
+    border-color: rgba(15, 23, 42, .14);
+}
+
+    .form-control:focus,
+    .form-select:focus {
+        border-color: rgba(37, 140, 251, .55);
+        box-shadow: 0 0 0 .20rem rgba(37, 140, 251, .18);
     }
 
-        #mainNavbar.navbar-compact .navbar-brand {
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-            line-height: 1.05;
-        }
+/* Table polish (light) */
+.table thead th {
+    font-size: .84rem;
+    color: #64748b;
+    font-weight: 700;
+    border-bottom: 1px solid rgba(15, 23, 42, .10);
+}
 
-        #mainNavbar.navbar-compact .brand-title {
-            font-size: 1.05rem;
-            line-height: 1.05;
-        }
+.table td {
+    border-top: 1px solid rgba(15, 23, 42, .06);
+}
 
-        #mainNavbar.navbar-compact .brand-sub {
-            font-size: .68rem;
-            line-height: 1.05;
-            margin-top: 0;
-        }
+/* =========================
+   Navbar behavior (pinned)
+   ========================= */
 
-        #mainNavbar.navbar-compact .nav-link {
-            padding-top: .30rem !important;
-            padding-bottom: .30rem !important;
-        }
+#mainNavbar {
+    transition: padding .15s ease, box-shadow .15s ease, background-color .15s ease, backdrop-filter .15s ease;
+}
 
-    /* Shrink + shadow on scroll (discret) */
-    #mainNavbar.navbar-scrolled {
-        box-shadow: 0 .25rem .7rem rgba(0,0,0,.12) !important;
+/* Light mode navbar: glass */
+html:not(.theme-dark) #mainNavbar.navbar-light,
+html:not(.theme-dark) #mainNavbar {
+    background-color: rgba(255,255,255,.92) !important;
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(15, 23, 42, .10) !important;
+}
+
+/* Compact */
+#mainNavbar.navbar-compact {
+    padding-top: .20rem !important;
+    padding-bottom: .20rem !important;
+}
+
+    #mainNavbar.navbar-compact .navbar-brand {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        line-height: 1.05;
     }
 
-        /* Daca e si compact + scrolled, si mai fin */
-        #mainNavbar.navbar-scrolled.navbar-compact {
-            padding-top: .12rem !important;
-            padding-bottom: .12rem !important;
-        }
+    #mainNavbar.navbar-compact .brand-title {
+        font-size: 1.05rem;
+        line-height: 1.05;
+        font-weight: 800;
+        letter-spacing: .2px;
+    }
 
-/* Highlight active menu item */
+    #mainNavbar.navbar-compact .brand-sub {
+        font-size: .68rem;
+        line-height: 1.05;
+        margin-top: 0;
+        opacity: .85;
+    }
+
+    /* Nav links (pill) */
+    #mainNavbar.navbar-compact .nav-link {
+        padding-top: .30rem !important;
+        padding-bottom: .30rem !important;
+        padding-left: .70rem !important;
+        padding-right: .70rem !important;
+        border-radius: 10px;
+        transition: background-color .15s ease, color .15s ease;
+    }
+
+/* Hover discret (light) */
+html:not(.theme-dark) .navbar .nav-link:hover {
+    background: rgba(37, 140, 251, .08);
+}
+
+/* Shadow on scroll */
+#mainNavbar.navbar-scrolled {
+    box-shadow: 0 .35rem 1rem rgba(15, 23, 42, .12) !important;
+}
+
+    /* Compact + scrolled => și mai fin */
+    #mainNavbar.navbar-scrolled.navbar-compact {
+        padding-top: .12rem !important;
+        padding-bottom: .12rem !important;
+    }
+
+/* Active menu */
 .navbar .nav-link.active {
     border-bottom: 2px solid currentColor;
+    background: rgba(37, 140, 251, .10);
 }
 
-/* ===== Dark Mode ===== */
-html.theme-dark,
-html.theme-dark body {
-    background-color: #121212;
-    color: #e7e7e7;
+/* Brand colors */
+#mainNavbar .brand-sub {
+    color: rgba(0,0,0,.55);
 }
 
-    html.theme-dark .navbar {
-        background-color: #1c1c1c !important;
-        border-bottom-color: rgba(255,255,255,.12) !important;
+#mainNavbar .nav-link {
+    color: rgba(0,0,0,.78);
+}
+
+    #mainNavbar .nav-link:hover {
+        color: rgba(0,0,0,.95);
     }
 
-        html.theme-dark .navbar .nav-link,
-        html.theme-dark .navbar .navbar-text,
-        html.theme-dark .navbar .navbar-brand {
-            color: #e7e7e7 !important;
+/* =========================
+   Dark Mode (fix complet)
+   ========================= */
+
+html.theme-dark {
+    color-scheme: dark;
+}
+
+    html.theme-dark,
+    html.theme-dark body {
+        background-color: #121212;
+        color: rgba(255,255,255,.92);
+    }
+
+        /* Navbar dark */
+        html.theme-dark #mainNavbar {
+            background-color: #1c1c1c !important;
+            border-bottom: 1px solid rgba(255,255,255,.12) !important;
+            box-shadow: 0 .25rem .7rem rgba(0,0,0,.35) !important;
         }
 
-            html.theme-dark .navbar .nav-link.active {
-                border-bottom-color: #e7e7e7;
+            html.theme-dark #mainNavbar .navbar-brand,
+            html.theme-dark #mainNavbar .navbar-brand .brand-title,
+            html.theme-dark #mainNavbar .navbar-text,
+            html.theme-dark #mainNavbar .nav-link {
+                color: rgba(255,255,255,.92) !important;
+                opacity: 1 !important;
             }
 
-    html.theme-dark .container,
-    html.theme-dark .container-fluid {
-        color: #e7e7e7;
-    }
+            html.theme-dark #mainNavbar .brand-sub {
+                color: rgba(255,255,255,.70) !important;
+            }
 
-    html.theme-dark .table {
-        color: #e7e7e7;
-    }
+            html.theme-dark #mainNavbar .nav-link:hover {
+                background: rgba(255,255,255,.10);
+                color: #fff !important;
+            }
 
-    html.theme-dark .table-striped > tbody > tr:nth-of-type(odd) > * {
-        color: #e7e7e7;
-    }
+            html.theme-dark #mainNavbar .nav-link.active {
+                color: #fff !important;
+                border-bottom-color: rgba(255,255,255,.85) !important;
+                background: rgba(255,255,255,.14) !important;
+            }
 
-    html.theme-dark .modal-content {
-        background-color: #1c1c1c;
-        color: #e7e7e7;
-    }
+            /* Toggler vizibil */
+            html.theme-dark #mainNavbar .navbar-toggler {
+                border-color: rgba(255,255,255,.35) !important;
+            }
 
-    html.theme-dark .form-control,
-    html.theme-dark .form-select {
-        background-color: #222;
-        color: #e7e7e7;
-        border-color: rgba(255,255,255,.2);
-    }
+            html.theme-dark #mainNavbar .navbar-toggler-icon {
+                filter: invert(1) grayscale(1) brightness(2);
+            }
 
-    html.theme-dark .btn-outline-secondary {
-        border-color: rgba(255,255,255,.35);
-        color: #e7e7e7;
-    }
+        /* Text helpers (explicații, muted, etc) */
+        html.theme-dark .text-muted,
+        html.theme-dark .text-secondary,
+        html.theme-dark small,
+        html.theme-dark .small,
+        html.theme-dark .form-text {
+            color: rgba(255,255,255,.72) !important;
+        }
+
+        html.theme-dark label,
+        html.theme-dark .form-label {
+            color: rgba(255,255,255,.90) !important;
+        }
+
+        /* Linkuri în dark */
+        html.theme-dark a,
+        html.theme-dark .link-primary {
+            color: rgba(130,190,255,.95);
+        }
+
+            html.theme-dark a:hover {
+                color: rgba(160,210,255,1);
+            }
+
+        /* HR / borders */
+        html.theme-dark hr,
+        html.theme-dark .border-top,
+        html.theme-dark .border-bottom {
+            border-color: rgba(255,255,255,.14) !important;
+        }
+
+        /* Tables in dark */
+        html.theme-dark .table {
+            color: rgba(255,255,255,.90) !important;
+            border-color: rgba(255,255,255,.12) !important;
+        }
+
+            html.theme-dark .table > :not(caption) > * > * {
+                color: rgba(255,255,255,.90) !important;
+                border-color: rgba(255,255,255,.10) !important;
+                background-color: transparent;
+            }
+
+        html.theme-dark .table-striped > tbody > tr:nth-of-type(odd) > * {
+            background-color: rgba(255,255,255,.04) !important;
+        }
+
+        /* Modal/card background */
+        html.theme-dark .modal-content,
+        html.theme-dark .card {
+            background-color: #1c1c1c;
+            color: rgba(255,255,255,.92);
+            border-color: rgba(255,255,255,.12);
+        }
+
+        /* ===== CRUCIAL: Inputs în dark (ca să se vadă placeholder + text) ===== */
+        html.theme-dark .form-control,
+        html.theme-dark .form-select,
+        html.theme-dark textarea,
+        html.theme-dark .input-group-text {
+            background-color: #222 !important;
+            color: rgba(255,255,255,.92) !important;
+            border-color: rgba(255,255,255,.18) !important;
+        }
+
+        html.theme-dark .input-group-text {
+            background-color: #1f1f1f !important;
+        }
+
+        /* Placeholder vizibil */
+        html.theme-dark .form-control::placeholder,
+        html.theme-dark textarea::placeholder,
+        html.theme-dark input::placeholder {
+            color: rgba(255,255,255,.55) !important;
+            opacity: 1;
+        }
+
+        /* Focus în dark */
+        html.theme-dark .form-control:focus,
+        html.theme-dark .form-select:focus {
+            border-color: rgba(130,190,255,.55) !important;
+            box-shadow: 0 0 0 .2rem rgba(130,190,255,.15) !important;
+        }
+
+        /* Autofill (Chrome) */
+        html.theme-dark input:-webkit-autofill,
+        html.theme-dark textarea:-webkit-autofill,
+        html.theme-dark select:-webkit-autofill {
+            -webkit-text-fill-color: rgba(255,255,255,.92) !important;
+            box-shadow: 0 0 0px 1000px #222 inset !important;
+        }
+
+        /* =========================================================
+   DARK MODE: normalizeaza zonele "albe" ramase (Notes/Mesaje)
+   ========================================================= */
+
+        html.theme-dark .bg-white {
+            background-color: #1c1c1c !important;
+        }
+
+        html.theme-dark .text-dark {
+            color: rgba(255,255,255,.92) !important;
+        }
+
+        html.theme-dark .border,
+        html.theme-dark .border-top,
+        html.theme-dark .border-bottom {
+            border-color: rgba(255,255,255,.12) !important;
+        }
+
+        /* List-group (daca Notes/Mesaje folosesc list-group) */
+        html.theme-dark .list-group-item {
+            background-color: #1c1c1c !important;
+            color: rgba(255,255,255,.92) !important;
+            border-color: rgba(255,255,255,.12) !important;
+        }
+
+        /* Card / orice container "alb" cu shadow */
+        html.theme-dark .card,
+        html.theme-dark .shadow,
+        html.theme-dark .shadow-sm {
+            background-color: #1c1c1c !important;
+            color: rgba(255,255,255,.92) !important;
+            border-color: rgba(255,255,255,.12) !important;
+        }
+
+        /* Zone des folosite pentru "cutii" (Bootstrap helpers) */
+        html.theme-dark .rounded,
+        html.theme-dark .rounded-3,
+        html.theme-dark .rounded-4 {
+            border-color: rgba(255,255,255,.12) !important;
+        }
+
+        /* Text secundar / descrieri */
+        html.theme-dark .text-muted,
+        html.theme-dark .form-text,
+        html.theme-dark small,
+        html.theme-dark .small {
+            color: rgba(255,255,255,.68) !important;
+        }
+
+        /* Inputs/textarea in cutii (mai ales la Mesaje) */
+        html.theme-dark textarea,
+        html.theme-dark input,
+        html.theme-dark .form-control,
+        html.theme-dark .form-select {
+            background-color: #222 !important;
+            color: rgba(255,255,255,.92) !important;
+            border-color: rgba(255,255,255,.18) !important;
+        }
+
+            html.theme-dark textarea::placeholder,
+            html.theme-dark input::placeholder,
+            html.theme-dark .form-control::placeholder {
+                color: rgba(255,255,255,.50) !important;
+                opacity: 1 !important;
+            }

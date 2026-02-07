@@ -19,13 +19,12 @@
 
     <header>
         <nav id="mainNavbar"
-             class="navbar navbar-expand-sm navbar-light bg-white border-bottom fixed-top shadow-sm navbar-compact">
-
+             class="navbar navbar-expand-sm navbar-light bg-white border-bottom fixed-top navbar-compact">
 
             <div class="container-fluid">
                 <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">
                     <span class="brand-title">WizVault</span>
-                    <small class="brand-sub text-muted d-block">by Wizrom Software</small>
+                    <small class="brand-sub d-block">by Wizrom Software</small>
                 </a>
 
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse"
@@ -39,16 +38,16 @@
                     {
                         <ul class="navbar-nav flex-grow-1">
                             <li class="nav-item">
-                                <a class="nav-link text-dark @active("Home")" asp-controller="Home" asp-action="Index">Parole</a>
+                                <a class="nav-link @active("Home")" asp-controller="Home" asp-action="Index">Parole</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link text-dark @active("Notes")" asp-controller="Notes" asp-action="Index">Notes</a>
+                                <a class="nav-link @active("Notes")" asp-controller="Notes" asp-action="Index">Notes</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link text-dark @active("Mesaje")" asp-controller="Mesaje" asp-action="Index">Mesaje</a>
+                                <a class="nav-link @active("Mesaje")" asp-controller="Mesaje" asp-action="Index">Mesaje</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link text-dark @active("Audit")" asp-controller="Audit" asp-action="Index">Audit</a>
+                                <a class="nav-link @active("Audit")" asp-controller="Audit" asp-action="Index">Audit</a>
                             </li>
                         </ul>
 
@@ -92,9 +91,13 @@
     </div>
 
     <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2026 - WizVault <small class="text-muted">by Wizrom Software</small> -
-            <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+        <div class="container d-flex align-items-center gap-2">
+            © 2026
+            <img src="~/images/wizrom-logo-footer.png"
+                 alt="Wizrom"
+                 style="height:auto; width:140px;" />
+            -
+            <a asp-controller="Home" asp-action="Privacy">Privacy</a>
         </div>
     </footer>
 
@@ -129,13 +132,14 @@
             }
         </script>
     }
+
     <script>
-    // Fix Back / Forward Cache (IIS + Chrome/Edge)
-    window.addEventListener("pageshow", function (event) {
-        if (event.persisted) {
-            window.location.reload();
-        }
-    });
+        // Fix Back / Forward Cache (IIS + Chrome/Edge)
+        window.addEventListener("pageshow", function (event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
     </script>
 </body>
 </html>
