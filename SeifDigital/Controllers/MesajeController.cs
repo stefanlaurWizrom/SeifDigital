@@ -135,11 +135,29 @@ namespace SeifDigital.Controllers
             }
             else if (msg.SourceType == "Notes")
             {
+                var rawTitle = (msg.Text ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(rawTitle))
+                {
+                    // fallback pentru mesaje vechi (care nu aveau titlu)
+                    var fallback = (msg.NoteText ?? "").Trim();
+                    rawTitle = fallback.Length > 80 ? fallback.Substring(0, 80) : fallback;
+                }
+
+                if (string.IsNullOrWhiteSpace(rawTitle))
+                    rawTitle = "Fără titlu";
+                if (rawTitle.Length > 255)
+                    rawTitle = rawTitle.Substring(0, 255);
+
+                var noteText = (msg.NoteText ?? "").Trim();
+                if (noteText.Length > 255)
+                    noteText = noteText.Substring(0, 255);
+
                 var note = new SeifDigital.Models.UserNote
                 {
                     OwnerKey = ownerKey,
                     OwnerUser = domainUser,
-                    Text = msg.NoteText ?? "",
+                    Title = rawTitle,
+                    Text = noteText,
                     CreatedUtc = DateTime.UtcNow,
                     UpdatedUtc = DateTime.UtcNow
                 };

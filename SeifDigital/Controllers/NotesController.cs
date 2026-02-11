@@ -4,7 +4,6 @@ using SeifDigital.Utils;
 using SeifDigital.Data;
 using Microsoft.EntityFrameworkCore;
 
-
 namespace SeifDigital.Controllers
 {
     public class NotesController : Controller
@@ -13,7 +12,6 @@ namespace SeifDigital.Controllers
         private readonly AuditService _audit;
         private readonly ApplicationDbContext _db;
 
-
         public NotesController(UserNoteService notes, AuditService audit, ApplicationDbContext db)
         {
             _notes = notes;
@@ -21,22 +19,17 @@ namespace SeifDigital.Controllers
             _db = db;
         }
 
-
         [HttpGet]
         public async Task<IActionResult> Index(string? q, int page = 1)
         {
-            // 2FA gate (important)
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
                 return RedirectToAction("Login", "Account");
 
-
-            // IMPORTANT: ownerKey = email (Mac + Windows)
             var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
             var domainUser = User?.Identity?.Name ?? "UNKNOWN";
 
             const int pageSize = 25;
 
-            // Service-ul trebuie să caute după OwnerKey (nu OwnerUser)
             var (items, total) = await _notes.SearchForOwnerKeyAsync(ownerKey, q, page, pageSize);
 
             ViewBag.Q = q ?? "";
@@ -44,7 +37,6 @@ namespace SeifDigital.Controllers
             ViewBag.PageSize = pageSize;
             ViewBag.Total = total;
 
-            // optional debug
             ViewBag.OwnerKey = ownerKey;
             ViewBag.DomainUser = domainUser;
 
@@ -53,21 +45,65 @@ namespace SeifDigital.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Add(string text)
+        public async Task<IActionResult> Add(string title, string text)
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
                 return RedirectToAction("Login", "Account");
 
-
             var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
             var domainUser = User?.Identity?.Name ?? "UNKNOWN";
 
-            // Add trebuie să seteze OwnerKey + păstrează OwnerUser pentru istoric
-            await _notes.AddAsync(ownerKey, domainUser, text);
+            await _notes.AddAsync(ownerKey, domainUser, title, text);
 
             _audit.Log(HttpContext, "Notes.Add", "Success",
                 targetType: "UserNote",
-                details: new { len = (text ?? "").Length });
+                details: new { titleLen = (title ?? "").Length, len = (text ?? "").Length });
+
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Edit(long id)
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction("Login", "Account");
+
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
+
+            var note = await _notes.GetForEditAsync(id, ownerKey);
+            if (note == null)
+            {
+                TempData["AccessDenied"] = "Nota nu există sau nu îți aparține.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            _audit.Log(HttpContext, "Notes.Edit.View", "Success",
+                targetType: "UserNote",
+                targetId: id.ToString());
+
+            return View(note);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(long id, string title, string text)
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction("Login", "Account");
+
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
+
+            var ok = await _notes.UpdateAsync(id, ownerKey, title, text);
+            if (!ok)
+            {
+                TempData["AccessDenied"] = "Nota nu există sau nu îți aparține.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            _audit.Log(HttpContext, "Notes.Edit.Save", "Success",
+                targetType: "UserNote",
+                targetId: id.ToString(),
+                details: new { titleLen = (title ?? "").Length, len = (text ?? "").Length });
 
             return RedirectToAction(nameof(Index));
         }
@@ -79,10 +115,8 @@ namespace SeifDigital.Controllers
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
                 return RedirectToAction("Login", "Account");
 
-
             var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
 
-            // Delete trebuie să valideze OwnerKey, nu OwnerUser
             await _notes.DeleteAsync(id, ownerKey);
 
             _audit.Log(HttpContext, "Notes.Delete", "Success",
@@ -91,6 +125,7 @@ namespace SeifDigital.Controllers
 
             return RedirectToAction(nameof(Index));
         }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Send(long id, string recipientEmail)
@@ -133,7 +168,7 @@ namespace SeifDigital.Controllers
                 SourceType = "Notes",
                 OriginalId = note.Id,
                 CreatedUtc = DateTime.UtcNow,
-
+                Text = note.Title,
                 NoteText = note.Text
             };
 
@@ -152,8 +187,8 @@ namespace SeifDigital.Controllers
                     to = recipientEmail,
                     createdUtc = msg.CreatedUtc
                 });
+
             return RedirectToAction(nameof(Index));
         }
-
     }
 }

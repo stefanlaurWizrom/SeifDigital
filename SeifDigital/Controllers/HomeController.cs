@@ -476,5 +476,90 @@ namespace SeifDigital.Controllers
             return RedirectToAction("Index");
         }
 
+        [HttpGet]
+        public async Task<IActionResult> Edit(int id)
+        {
+            var ownerKey = HttpContext.Session.GetString("LoginEmail");
+            if (string.IsNullOrWhiteSpace(ownerKey) || HttpContext.Session.GetString("Status2FA") != "Validat")
+            {
+                return RedirectToAction("Login", "Account");
+            }
+
+            var item = await _context.InformatiiSensibile
+                .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
+
+            if (item == null)
+            {
+                TempData["AccessDenied"] = "Înregistrarea nu există sau nu ai acces la ea.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var vm = new InformatieSensibilaEditViewModel
+            {
+                Id = item.Id,
+                TitluAplicatie = item.TitluAplicatie,
+                UsernameSalvat = item.UsernameSalvat
+            };
+
+            try
+            {
+                vm.Parola = _crypto.Decrypt(item.DateCriptate ?? "");
+            }
+            catch
+            {
+                vm.Parola = "";
+            }
+
+            try
+            {
+                vm.Detalii = string.IsNullOrWhiteSpace(item.DetaliiCriptate) ? "" : _crypto.Decrypt(item.DetaliiCriptate);
+            }
+            catch
+            {
+                vm.Detalii = "";
+            }
+
+            return View(vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(InformatieSensibilaEditViewModel model)
+        {
+            var ownerKey = HttpContext.Session.GetString("LoginEmail");
+            if (string.IsNullOrWhiteSpace(ownerKey) || HttpContext.Session.GetString("Status2FA") != "Validat")
+            {
+                return RedirectToAction("Login", "Account");
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var item = await _context.InformatiiSensibile
+                .FirstOrDefaultAsync(x => x.Id == model.Id && x.OwnerKey == ownerKey);
+
+            if (item == null)
+            {
+                TempData["AccessDenied"] = "Înregistrarea nu există sau nu ai acces la ea.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            item.TitluAplicatie = (model.TitluAplicatie ?? "").Trim();
+            item.UsernameSalvat = (model.UsernameSalvat ?? "").Trim();
+
+            // Se salvează doar criptat
+            item.DateCriptate = _crypto.Encrypt(model.Parola ?? "");
+            item.DetaliiCriptate = string.IsNullOrWhiteSpace(model.Detalii) ? null : _crypto.Encrypt(model.Detalii);
+            // Nu folosim câmp LastUpdatedUtc în DB/model (evităm schimbări de schemă).
+            // Dacă vrei „Last updated” real, îl adăugăm ulterior ca coloană + migrare.
+            await _context.SaveChangesAsync();
+
+            _audit.Log(HttpContext, "Secret.Edit", "Success", "InformatieSensibila", item.Id.ToString());
+
+            return RedirectToAction(nameof(Index));
+        }
+
     }
 }

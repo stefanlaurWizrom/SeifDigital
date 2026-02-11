@@ -360,3 +360,45 @@ html.theme-dark {
                 color: rgba(255,255,255,.50) !important;
                 opacity: 1 !important;
             }
+
+/* =========================
+   Notes – titlu separat de continut
+   ========================= */
+.list-group-item .fw-semibold {
+    background-color: rgba(0, 0, 0, 0.04);
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    border-left: 3px solid #0d6efd;
+}
+
+body.dark .list-group-item .fw-semibold,
+body.dark-mode .list-group-item .fw-semibold,
+[data-bs-theme="dark"] .list-group-item .fw-semibold {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* =========================
+   Mesaje (Notes) – titlu evidentiat
+   ========================= */
+.mesaje-note-title {
+    background-color: rgba(0, 0, 0, 0.04);
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    border-left: 3px solid #0d6efd;
+    font-weight: 600;
+}
+
+body.dark .mesaje-note-title,
+body.dark-mode .mesaje-note-title,
+[data-bs-theme="dark"] .mesaje-note-title {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.navbar-logo {
+    height: 34px; /* înălțime controlată */
+    width: auto; /* păstrează proporțiile */
+    object-fit: contain;
+}
+

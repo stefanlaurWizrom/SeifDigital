@@ -88,3 +88,20 @@ a.navbar-brand img {
     height: auto;
     display: block;
 }
+
+
+
+/* =========================
+   Notes – titlu separat de continut
+   ========================= */
+.list-group-item .fw-semibold {
+    background-color: rgba(0, 0, 0, 0.04);
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    border-left: 3px solid #0d6efd;
+}
+
+body.dark .list-group-item .fw-semibold {
+    background-color: rgba(255, 255, 255, 0.08);
+}

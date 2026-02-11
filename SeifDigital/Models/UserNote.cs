@@ -6,14 +6,17 @@ namespace SeifDigital.Models
     {
         public long Id { get; set; }   // BIGINT în SQL => long în C#
 
-        // OwnerKey = email (unifică Windows + Mac)
         [MaxLength(256)]
         public string? OwnerKey { get; set; }
 
-        // păstrăm OwnerUser pentru istoric (DOMAIN\user)
         [Required]
         [MaxLength(256)]
         public string OwnerUser { get; set; } = "";
+
+        // ✅ NOU
+        [Required]
+        [MaxLength(255)]
+        public string Title { get; set; } = "Fără titlu";
 
         [Required]
         [MaxLength(255)]

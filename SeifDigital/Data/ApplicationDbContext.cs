@@ -19,7 +19,6 @@ namespace SeifDigital.Data
         public DbSet<UserAccount> UserAccounts { get; set; }
         public DbSet<UserMessage> UserMessages { get; set; }
 
-
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -38,8 +37,6 @@ namespace SeifDigital.Data
                 e.Property(x => x.TitluAplicatie).HasMaxLength(256);
                 e.Property(x => x.UsernameSalvat).HasMaxLength(256);
 
-                // Criptate -> de obicei NVARCHAR(MAX) / VARCHAR(MAX) în DB.
-                // Dacă în DB sunt altfel, ajustăm.
                 e.Property(x => x.DateCriptate);
                 e.Property(x => x.DetaliiCriptate);
                 e.Property(x => x.DetaliiTokens);
@@ -99,6 +96,12 @@ namespace SeifDigital.Data
                     .HasColumnName("OwnerKey")
                     .HasMaxLength(256);
 
+                // ✅ NOU: Title (dbo.UserNote.Title)
+                e.Property(x => x.Title)
+                    .HasColumnName("Title")
+                    .HasMaxLength(255)
+                    .IsRequired();
+
                 e.Property(x => x.Text)
                     .HasColumnName("NoteText")
                     .HasMaxLength(255)
@@ -135,8 +138,6 @@ namespace SeifDigital.Data
 
             // =========================
             // UserAccount (dbo.UserAccount) - LOGIN
-            // PasswordHash VARBINARY(64) <-> byte[]
-            // PasswordSalt VARBINARY(16) <-> byte[]
             // =========================
             modelBuilder.Entity<UserAccount>(e =>
             {
@@ -173,8 +174,8 @@ namespace SeifDigital.Data
                 e.Property(x => x.IsAdmin)
                     .HasColumnType("bit")
                     .IsRequired();
-
             });
+
             // =========================
             // UserMessage (dbo.UserMessage) - inbox
             // =========================
@@ -202,7 +203,6 @@ namespace SeifDigital.Data
                 e.HasIndex(x => x.RecipientOwnerKey);
                 e.HasIndex(x => x.SourceType);
             });
-
         }
     }
 }

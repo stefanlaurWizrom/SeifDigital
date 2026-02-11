@@ -1,0 +1,39 @@
+﻿@model SeifDigital.Models.UserNote
+
+@{
+    ViewData["Title"] = "Editare notă";
+}
+
+<div class="container mt-4" style="max-width:900px;">
+    <h2>Editare notă</h2>
+    <p class="text-muted">Modifică titlul și conținutul. Maxim 255 caractere fiecare.</p>
+
+    <form asp-action="Edit" method="post">
+        @Html.AntiForgeryToken()
+
+        <input type="hidden" name="id" value="@Model.Id" />
+
+        <div class="mb-3">
+            <label class="form-label">Titlu</label>
+            <input name="title"
+                   class="form-control"
+                   maxlength="255"
+                   value="@Model.Title"
+                   required />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Conținut</label>
+            <textarea name="text"
+                      class="form-control"
+                      rows="5"
+                      maxlength="255"
+                      required>@Model.Text</textarea>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Salvează</button>
+            <a class="btn btn-outline-secondary" href="/Notes">Înapoi</a>
+        </div>
+    </form>
+</div>

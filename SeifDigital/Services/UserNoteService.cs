@@ -33,7 +33,7 @@ namespace SeifDigital.Services
             if (!string.IsNullOrWhiteSpace(q))
             {
                 q = q.Trim();
-                query = query.Where(x => x.Text.Contains(q));
+                query = query.Where(x => x.Title.Contains(q) || x.Text.Contains(q));
             }
 
             var total = await query.CountAsync();
@@ -47,18 +47,26 @@ namespace SeifDigital.Services
             return (items, total);
         }
 
-        public async Task AddAsync(string ownerKey, string ownerUser, string text)
+        // Compat: dacă mai există apeluri vechi
+        public Task AddAsync(string ownerKey, string ownerUser, string text)
+        {
+            var title = DeriveTitle(text);
+            return AddAsync(ownerKey, ownerUser, title, text);
+        }
+
+        public async Task AddAsync(string ownerKey, string ownerUser, string title, string text)
         {
             if (string.IsNullOrWhiteSpace(ownerKey)) return;
-            if (string.IsNullOrWhiteSpace(text)) return;
 
-            text = text.Trim();
-            if (text.Length > 255) text = text.Substring(0, 255);
+            title = NormalizeTitle(title);
+            text = NormalizeText(text);
+            if (string.IsNullOrWhiteSpace(text)) return;
 
             var note = new UserNote
             {
                 OwnerKey = ownerKey,
                 OwnerUser = ownerUser ?? "",
+                Title = title,
                 Text = text,
                 CreatedUtc = DateTime.UtcNow,
                 UpdatedUtc = DateTime.UtcNow
@@ -66,6 +74,32 @@ namespace SeifDigital.Services
 
             _db.UserNotes.Add(note);
             await _db.SaveChangesAsync();
+        }
+
+        public async Task<UserNote?> GetForEditAsync(long id, string ownerKey)
+        {
+            if (string.IsNullOrWhiteSpace(ownerKey)) return null;
+
+            return await _db.UserNotes
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
+        }
+
+        public async Task<bool> UpdateAsync(long id, string ownerKey, string title, string text)
+        {
+            if (string.IsNullOrWhiteSpace(ownerKey)) return false;
+
+            var note = await _db.UserNotes
+                .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
+
+            if (note == null) return false;
+
+            note.Title = NormalizeTitle(title);
+            note.Text = NormalizeText(text);
+            note.UpdatedUtc = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+            return true;
         }
 
         public async Task DeleteAsync(long id, string ownerKey)
@@ -79,6 +113,34 @@ namespace SeifDigital.Services
 
             _db.UserNotes.Remove(n);
             await _db.SaveChangesAsync();
+        }
+
+        private static string NormalizeTitle(string? title)
+        {
+            title = (title ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(title))
+                title = "Fără titlu";
+            if (title.Length > 255)
+                title = title.Substring(0, 255);
+            return title;
+        }
+
+        private static string NormalizeText(string? text)
+        {
+            text = (text ?? "").Trim();
+            if (text.Length > 255)
+                text = text.Substring(0, 255);
+            return text;
+        }
+
+        private static string DeriveTitle(string? text)
+        {
+            text = (text ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(text))
+                return "Fără titlu";
+
+            var t = text.Length > 80 ? text.Substring(0, 80) : text;
+            return NormalizeTitle(t);
         }
     }
 }

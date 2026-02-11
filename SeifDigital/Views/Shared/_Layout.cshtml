@@ -22,10 +22,13 @@
              class="navbar navbar-expand-sm navbar-light bg-white border-bottom fixed-top navbar-compact">
 
             <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">
-                    <span class="brand-title">WizVault</span>
-                    <small class="brand-sub d-block">by Wizrom Software</small>
+                <a class="navbar-brand" asp-controller="Home" asp-action="Index">
+                    <img src="~/images/WIZVAULT_logo_navbar.png"
+                         alt="WizVault"
+                         style="height:45px; width:auto;" />
                 </a>
+
+
 
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse"
                         aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
@@ -41,7 +44,7 @@
                                 <a class="nav-link @active("Home")" asp-controller="Home" asp-action="Index">Parole</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link @active("Notes")" asp-controller="Notes" asp-action="Index">Notes</a>
+                                <a class="nav-link @active("Notes")" asp-controller="Notes" asp-action="Index">Note</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link @active("Mesaje")" asp-controller="Mesaje" asp-action="Index">Mesaje</a>

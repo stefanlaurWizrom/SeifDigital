@@ -1,4 +1,4 @@
-﻿@model List<SeifDigital.Models.UserMessage>
+@model List<SeifDigital.Models.UserMessage>
 
 @{
     ViewData["Title"] = "Mesaje";
@@ -38,9 +38,16 @@
                                     <div class="text-muted">@m.UsernameSalvat</div>
                                 </div>
                             }
+                            else if (m.SourceType == "Notes")
+                            {
+                                <div class="mt-2">
+                                    <div class="mesaje-note-title">@((string.IsNullOrWhiteSpace(m.Text) ? "Fără titlu" : m.Text))</div>
+                                    <div class="mt-1" style="white-space:pre-wrap">@m.NoteText</div>
+                                </div>
+                            }
                             else
                             {
-                                <div class="mt-2" style="white-space:pre-wrap">@m.NoteText</div>
+                                <div class="mt-2" style="white-space:pre-wrap">@m.Text</div>
                             }
                         </div>
 
@@ -84,10 +91,10 @@
                     {
                         <div class="mt-2">
                             <textarea id="@outId"
-                          class="form-control form-control-sm"
-                          rows="2"
-                          readonly
-                          placeholder="Parola/Detalii vor apărea aici..."></textarea>
+                                      class="form-control form-control-sm"
+                                      rows="2"
+                                      readonly
+                                      placeholder="Parola/Detalii vor apărea aici..."></textarea>
                         </div>
                     }
                 </div>
