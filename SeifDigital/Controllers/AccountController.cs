@@ -85,7 +85,8 @@ namespace SeifDigital.Controllers
                 if (errLogin.Contains("Nu există cont", StringComparison.OrdinalIgnoreCase))
                     ViewBag.Mesaj = "Nu există cont pentru acest email. Apasă „Creează cont”.";
                 else
-                    ViewBag.Mesaj = errLogin;
+                    // mesaj generic pentru credențiale greșite
+                    ViewBag.Mesaj = "Utilizator sau parola gresita";
 
                 ViewBag.Email = email;
 
@@ -192,6 +193,146 @@ Dacă NU ai cerut acest cod, ignoră acest email.";
 
             return View();
         }
+
+	    // ─────────────────────────────────────────────────────────────────────────────
+	    // Forgot password (reset) flow
+	    // ─────────────────────────────────────────────────────────────────────────────
+	    [HttpGet]
+	    public IActionResult ForgotPassword()
+	    {
+	        ViewBag.Email = "";
+	        ViewBag.Mesaj = "";
+	        return View();
+	    }
+
+	    [HttpPost]
+	    [ValidateAntiForgeryToken]
+	    public async Task<IActionResult> ForgotPassword(string email)
+	    {
+	        email = (email ?? "").Trim().ToLowerInvariant();
+	        if (string.IsNullOrWhiteSpace(email))
+	        {
+	            ViewBag.Mesaj = "Introdu emailul.";
+	            return View();
+	        }
+
+	        var acc = await _accounts.FindByEmailAsync(email);
+	        if (acc == null)
+	        {
+	            ViewBag.Mesaj = "Nu există cont pentru acest email.";
+	            ViewBag.Email = email;
+	            return View();
+	        }
+
+	        // Generează cod reset + persistă în sesiune
+	        var code = GenerateOtp6();
+	        HttpContext.Session.SetString("ResetEmail", email);
+	        HttpContext.Session.SetString("ResetCode", code);
+	        HttpContext.Session.Remove("ResetVerified");
+
+	        // Trimite email (același mecanism ca 2FA)
+	        try
+	        {
+	            var subject = "WizVault - Cod resetare parolă";
+	            var body = $"Codul tău pentru resetarea parolei este: {code}\n\nDacă nu ai cerut resetarea, ignoră acest email.";
+	            _email.Send(email, subject, body);
+	        }
+	        catch
+	        {
+	            ViewBag.Mesaj = "Nu s-a putut trimite emailul. Încearcă din nou.";
+	            ViewBag.Email = email;
+	            return View();
+	        }
+
+	        return RedirectToAction(nameof(VerifyResetCode));
+	    }
+
+	    [HttpGet]
+	    public IActionResult VerifyResetCode()
+	    {
+	        var email = HttpContext.Session.GetString("ResetEmail") ?? "";
+	        if (string.IsNullOrWhiteSpace(email))	// flow invalid
+	            return RedirectToAction(nameof(Login));
+
+	        ViewBag.Email = email;
+	        ViewBag.Mesaj = "";
+	        return View();
+	    }
+
+	    [HttpPost]
+	    [ValidateAntiForgeryToken]
+	    public IActionResult VerifyResetCode(string code)
+	    {
+	        var expected = HttpContext.Session.GetString("ResetCode") ?? "";
+	        var email = HttpContext.Session.GetString("ResetEmail") ?? "";
+	
+	        if (string.IsNullOrWhiteSpace(email))
+	            return RedirectToAction(nameof(Login));
+
+	        if (!string.IsNullOrWhiteSpace(code) && code.Trim() == expected)
+	        {
+	            HttpContext.Session.SetString("ResetVerified", "1");
+	            return RedirectToAction(nameof(ResetPassword));
+	        }
+
+	        ViewBag.Mesaj = "Cod incorect.";
+	        ViewBag.Email = email;
+	        return View();
+	    }
+
+	    [HttpGet]
+	    public IActionResult ResetPassword()
+	    {
+	        var email = HttpContext.Session.GetString("ResetEmail") ?? "";
+	        var ok = HttpContext.Session.GetString("ResetVerified") == "1";
+	
+	        if (!ok || string.IsNullOrWhiteSpace(email))
+	            return RedirectToAction(nameof(Login));
+
+	        ViewBag.Email = email;
+	        ViewBag.Mesaj = "";
+	        return View();
+	    }
+
+	    [HttpPost]
+	    [ValidateAntiForgeryToken]
+	    public async Task<IActionResult> ResetPassword(string newPassword, string confirmPassword)
+	    {
+	        var email = HttpContext.Session.GetString("ResetEmail") ?? "";
+	        var ok = HttpContext.Session.GetString("ResetVerified") == "1";
+	
+	        if (!ok || string.IsNullOrWhiteSpace(email))
+	            return RedirectToAction(nameof(Login));
+
+	        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 12)
+	        {
+	            ViewBag.Mesaj = "Parola trebuie să aibă minim 12 caractere.";
+	            ViewBag.Email = email;
+	            return View();
+	        }
+	        if (newPassword != (confirmPassword ?? ""))
+	        {
+	            ViewBag.Mesaj = "Parolele nu coincid.";
+	            ViewBag.Email = email;
+	            return View();
+	        }
+
+	        var (okSet, err) = await _accounts.SetPasswordByEmailAsync(email, newPassword);
+	        if (!okSet)
+	        {
+	            ViewBag.Mesaj = err;
+	            ViewBag.Email = email;
+	            return View();
+	        }
+
+	        // curăță flow reset
+	        HttpContext.Session.Remove("ResetEmail");
+	        HttpContext.Session.Remove("ResetCode");
+	        HttpContext.Session.Remove("ResetVerified");
+
+	        TempData["ResetOk"] = "Parola a fost schimbată. Te poți autentifica.";
+	        return RedirectToAction(nameof(Login));
+	    }
 
         [HttpPost]
         [ValidateAntiForgeryToken]

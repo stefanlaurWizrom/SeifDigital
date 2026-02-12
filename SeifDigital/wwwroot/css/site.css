@@ -402,3 +402,101 @@ body.dark-mode .mesaje-note-title,
     object-fit: contain;
 }
 
+
+
+/* Password eye button (hold to reveal) */
+.password-eye-wrap{
+    position:relative;
+    display:flex;
+    align-items:stretch;
+}
+
+/* Tidy the login eye so there are no visible corner artifacts */
+.password-eye-wrap > input.form-control{
+    padding-right:52px; /* space for eye */
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    box-sizing: border-box;
+}
+
+/* Make the button flush with the input and remove focus corners */
+.password-eye-btn{
+    position:absolute;
+    right:-1px;        /* overlap 1px border so no visible gap */
+    top:0;
+    height:100%;       /* match input height exactly */
+    border:1px solid rgba(15,23,42,.14);
+    border-left: none; /* avoid double border where it meets input */
+    background:#fff;
+    border-radius: 0 12px 12px 0; /* square left edge, rounded right edge */
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0 .6rem;
+    z-index:3;
+    outline: none;
+    box-shadow: none;
+}
+
+/* Remove focus ring on the button (so no unexpected rounded outline) */
+.password-eye-btn:focus,
+.password-eye-btn:active {
+    outline: none;
+    box-shadow: none;
+}
+.password-eye-icon{
+    font-size:16px;
+    line-height:1;
+}
+
+/* Dark theme tweak so the eye stays visible in dark mode */
+html.theme-dark .password-eye-btn{
+    background:#2a2a2a;
+    border-color: rgba(255,255,255,.12);
+    color: rgba(255,255,255,.92);
+}
+
+/* Ensure ResetPassword eye button is visible and clickable */
+.pw-eye-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 34px;
+    border-radius: 10px;
+    z-index: 3; /* sit above input */
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+}
+
+/* slight visual parity with other eye style */
+.pw-eye-btn span { font-size: 16px; line-height: 1; }
+
+/* Align ResetPassword eye button with the input (no gap) */
+.input-group > input.form-control {
+    /* remove the input's right rounding so it joins the button exactly */
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    box-sizing: border-box;
+}
+
+.input-group > .pw-eye-btn {
+    /* overlap the 1px border so there's no visible gap */
+    margin-left: -1px;
+    /* make the left edge square so it joins the input, keep right corners rounded */
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-top-right-radius: 12px;
+    border-bottom-right-radius: 12px;
+
+    /* match input visuals */
+    border-left: 1px solid rgba(15,23,42,.14);
+    background: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.6rem;
+    height: 42px; /* adjust if your inputs have different computed height */
+    box-sizing: border-box;
+    z-index: 3;
+}

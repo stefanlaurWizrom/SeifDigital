@@ -1,4 +1,4 @@
-﻿@{
+@{
     ViewData["Title"] = "Autentificare";
     var email = (ViewBag.Email as string) ?? "";
 }
@@ -28,9 +28,18 @@
 
         <div class="mb-3 text-start">
             <label class="form-label">Parolă</label>
-            <input class="form-control" type="password" name="password" required />
+
+            <!-- Use Bootstrap-style input-group so the login field matches ResetPassword visuals -->
+            <div class="input-group">
+                <input id="loginPassword" class="form-control" type="password" name="password" required autocomplete="current-password" />
+                <button class="btn btn-outline-secondary pw-eye-btn" type="button" data-target="loginPassword" aria-label="Arată parola">
+                    <span aria-hidden="true">👁</span>
+                </button>
+            </div>
+
             <div class="form-text">
                 Minim 12 caractere, litere mari/mici, cifre și simbol.
+                <div class="small text-muted mt-1">Ține apăsat pe 👁 ca să vezi parola.</div>
             </div>
         </div>
 
@@ -41,6 +50,10 @@
                     value="login">
                 Login
             </button>
+
+            <div class="mt-2">
+                <a class="text-decoration-underline" href="/Account/ForgotPassword">Am uitat parola</a>
+            </div>
 
             <div class="alert alert-secondary mt-2">
                 Dacă nu ai cont încă, apasă direct pe „Creează cont”.

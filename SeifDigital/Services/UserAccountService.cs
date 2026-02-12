@@ -109,6 +109,37 @@ namespace SeifDigital.Services
             return (true, "", acc);
         }
 
+	    /// <summary>
+	    /// Resetează parola pentru un cont existent (folosit la "Am uitat parola").
+	    /// </summary>
+	    public async Task<(bool Ok, string Error)> SetPasswordByEmailAsync(string email, string newPassword)
+	    {
+	        email = NormalizeEmail(email);
+	
+	        if (!IsAllowedEmail(email))
+	            return (false, "Email invalid. Trebuie să fie @wizrom.ro");
+	
+	        if (!IsPasswordComplex(newPassword))
+	            return (false, "Parola nu respectă regula de complexitate (minim 12, mare/mic, cifră, simbol).");
+	
+	        var acc = await _db.UserAccounts.FirstOrDefaultAsync(x => x.Email == email);
+	        if (acc == null)
+	            return (false, "Nu există cont. Creează-l mai jos.");
+	
+	        if (!acc.IsActive)
+	            return (false, "Cont dezactivat.");
+	
+	        var salt = RandomNumberGenerator.GetBytes(16);
+	        var hash = HashPassword(newPassword, salt);
+	
+	        acc.PasswordSalt = salt;
+	        acc.PasswordHash = hash;
+	        acc.UpdatedUtc = DateTime.UtcNow;
+	
+	        await _db.SaveChangesAsync();
+	        return (true, "");
+	    }
+
         // ============================
         // Crypto helpers
         // ============================
