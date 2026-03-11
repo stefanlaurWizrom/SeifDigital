@@ -6,18 +6,21 @@ namespace SeifDigital.Models
     {
         public int Id { get; set; }
 
-        public string? NumeUtilizator { get; set; }     // OWNER (user domeniu logat)
-        public string? UsernameSalvat { get; set; }     // user pentru RDP/aplicație (EDITABIL)
-        public string? TitluAplicatie { get; set; }     // titlu
-        public string? OwnerKey { get; set; }  // email (recomandat) sau fallback domain\user
+        public string? NumeUtilizator { get; set; }
+        public string? UsernameSalvat { get; set; }
+        public string? TitluAplicatie { get; set; }
+        public string? OwnerKey { get; set; }
 
-        public string? DateCriptate { get; set; }       // parola criptată (string)
-        public string? DetaliiCriptate { get; set; }    // detalii criptate (string)  <-- NOU
-
-        // tokenized, normalized text used for searching (NOT full details)
+        public string? DateCriptate { get; set; }
+        public string? DetaliiCriptate { get; set; }
         public string? DetaliiTokens { get; set; }
 
+        public DateTime? LastUpdatedUtc { get; set; }
+
+        // ✅ ACTUALIZAT: Many-to-Many relație cu imagini
+        public ICollection<InformatieImagine> Imagini { get; set; } = new List<InformatieImagine>();
+
         [NotMapped]
-        public string? ParolaDecriptata { get; set; }   // DOAR pentru afișare (nu se salvează)
+        public string? ParolaDecriptata { get; set; }
     }
 }

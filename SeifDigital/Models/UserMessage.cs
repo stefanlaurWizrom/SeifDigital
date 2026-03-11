@@ -25,5 +25,8 @@ namespace SeifDigital.Models
         // ===== payload pentru Notes =====
         public string? NoteText { get; set; }
         public string? Text { get; set; } // opțional
+
+        // ===== Image File IDs (JSON array: [fileId1, fileId2, ...]) =====
+        public string? AttachedImageFileIds { get; set; }
     }
 }

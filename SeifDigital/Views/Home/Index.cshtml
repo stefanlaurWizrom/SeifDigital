@@ -112,7 +112,7 @@
     </form>
 
     <div class="mb-2 text-muted">
-        Afișez @Model.StartItemIndex - @Model.EndItemIndex din @Model.TotalCount
+        Afișez @(Model?.StartItemIndex ?? 0) - @(Model?.EndItemIndex ?? 0) din @(Model?.TotalCount ?? 0)
     </div>
 
     <table class="table table-striped align-middle">
@@ -166,14 +166,20 @@
                             Detalii
                         </button>
 
-                        @* NOU: Trimite -> deschide modal *@
                         <button type="button"
-                                class="btn btn-sm btn-outline-primary"
-                                onclick="openSendModal(@item.Id)">
-                            Trimite
+                                class="btn btn-sm btn-outline-warning"
+                                onclick="openImageModal(@item.Id)">
+                            📁 Fisiere
                         </button>
 
-                        <form asp-controller="Home"
+                        @* NOU: Trimite -> deschide modal *@
+                         <button type="button"
+                                 class="btn btn-sm btn-outline-primary"
+                                 onclick="openSendModal(@item.Id)">
+                             Trimite
+                         </button>
+
+                         <form asp-controller="Home"
                               asp-action="Sterge"
                               method="post"
                               onsubmit="return confirm('Sigur vrei să ștergi această înregistrare?');"
@@ -256,6 +262,51 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Renunță</button>
                     <button type="submit" class="btn btn-primary">Trimite</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* ✅ NOU: Modal pentru upload imagine *@
+<div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="imageUploadForm" method="post" asp-action="UploadImage" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" id="imageUploadId" value="" />
+
+                <div class="modal-header">
+                    <h5 class="modal-title">Imagine pentru detalii</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Imagine existentă -->
+                    <div id="imagePreviewContainer" class="mb-4">
+                        <!-- Se populează din JS -->
+                    </div>
+
+                    <!-- Formular upload -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Încarcă imagine nouă</h6>
+                        </div>
+                        <div class="card-body">
+                            <label for="imageFileInput" class="form-label">Selectează imagine (JPG, PNG)</label>
+                            <input type="file" 
+                                   id="imageFileInput" 
+                                   name="imageFile" 
+                                   accept=".jpg,.jpeg,.png" 
+                                   class="form-control" />
+                            <small class="text-muted">Max 5MB</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Renunță</button>
+                    <button type="submit" class="btn btn-primary">Salvează</button>
                 </div>
             </form>
         </div>
@@ -552,5 +603,119 @@
             const modal = new bootstrap.Modal(modalEl);
             modal.show();
         }
+
+        // ===== NOU: Upload Imagine -> modal =====
+        function openImageModal(id) {
+            document.getElementById('imageUploadId').value = id;
+            const container = document.getElementById('imagePreviewContainer');
+
+            // Curăță containerul anterior
+            container.innerHTML = '<p class="text-muted">Se încarcă imaginile...</p>';
+
+            // Preia imaginile pentru această înregistrare
+            fetch(`/Home/GetInformationImages?id=${id}`)
+                .then(r => r.json())
+                .then(data => {
+                    container.innerHTML = ''; // Curață mesajul de încărcare
+
+                    if (!data.success || !data.images || data.images.length === 0) {
+                        container.innerHTML = '<p class="text-muted">Nicio imagine atasată</p>';
+                        return;
+                    }
+
+                    // Creează galerie din imagini
+                    const galleryHtml = `
+                        <div class="card mb-4">
+                            <div class="card-header bg-info bg-opacity-10">
+                                <h6 class="mb-0">📷 Imagini atasate (${data.images.length})</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2">
+                                    ${data.images.map(img => `
+                                        <div class="col-md-6 col-lg-4">
+                                            <div class="border rounded p-2">
+                                                <img src="${img.previewUrl}&t=${Date.now()}" 
+                                                     class="img-fluid rounded mb-2" 
+                                                     style="max-height: 150px; object-fit: contain; width: 100%;"
+                                                     alt="${img.fileName}" />
+                                                <small class="text-muted d-block text-truncate">${img.fileName}</small>
+                                                <small class="text-muted">${(img.sizeBytes / 1024).toFixed(0)} KB</small>
+                                                <div class="mt-2">
+                                                    <a href="/Home/DownloadImage?fileId=${img.id}" 
+                                                       class="btn btn-xs btn-outline-primary me-1" 
+                                                       download>⬇️</a>
+                                                    <button type="button" 
+                                                            class="btn btn-xs btn-outline-danger"
+                                                            onclick="deleteImage(${id}, ${img.id})">🗑️</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.innerHTML = galleryHtml;
+                })
+                .catch(err => {
+                    console.error(err);
+                    container.innerHTML = '<p class="text-danger">Eroare la încărcarea imaginilor</p>';
+                });
+
+            const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+            modal.show();
+        }
+
+        // ===== Șterge imagine din galerie =====
+        async function deleteImage(informationId, fileId) {
+            if (!confirm('Sigur vrei să ștergi această imagine?')) return;
+
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            const token = tokenInput ? tokenInput.value : '';
+
+            try {
+                const response = await fetch('/Home/DeleteImage', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                    },
+                    body: `informationId=${encodeURIComponent(informationId)}&fileId=${encodeURIComponent(fileId)}&__RequestVerificationToken=${encodeURIComponent(token)}`
+                });
+
+                if (response.ok) {
+                    // Reîncarcă imagini
+                    openImageModal(informationId);
+                } else {
+                    alert('Eroare la ștergerea imaginii.');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Eroare de rețea.');
+            }
+        }
+
+        // ===== NOU: Previzualizare imagine încărcată (din modal) =====
+        document.getElementById("imageFileInput")?.addEventListener("change", function() {
+            const file = this.files[0];
+            const previewContainer = document.getElementById("imagePreviewContainer");
+
+            // Curăță preview-ul anterior
+            previewContainer.innerHTML = "";
+
+            if (file) {
+                const reader = new FileReader();
+
+                reader.onload = function(e) {
+                    const img = document.createElement("img");
+                    img.src = e.target.result;
+                    img.classList.add("img-fluid");
+                    img.style.maxHeight = "400px";
+                    img.style.objectFit = "contain";
+                    previewContainer.appendChild(img);
+                };
+
+                reader.readAsDataURL(file);
+            }
+        });
     </script>
 }

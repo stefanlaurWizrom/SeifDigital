@@ -4,11 +4,11 @@ namespace SeifDigital.Models
 {
     public class UserFile
     {
-        public int Id { get; set; }
+        public long Id { get; set; }
 
         [Required]
         [MaxLength(256)]
-        public string OwnerUser { get; set; } = "";   // DOMAIN\user
+        public string OwnerUser { get; set; } = "";
 
         [Required]
         [MaxLength(255)]
@@ -16,11 +16,14 @@ namespace SeifDigital.Models
 
         [Required]
         [MaxLength(20)]
-        public string Extension { get; set; } = ""; // ".pfx", ".cer" etc.
+        public string Extension { get; set; } = "";
 
         [Required]
         [MaxLength(255)]
-        public string StoredFileName { get; set; } = ""; // ex: GUID + ext
+        public string StoredFileName { get; set; } = "";
+
+        [MaxLength(255)]
+        public string StoredRelativePath { get; set; } = "";
 
         public long SizeBytes { get; set; }
 
@@ -28,5 +31,8 @@ namespace SeifDigital.Models
         public string? ContentType { get; set; }
 
         public DateTime UploadedUtc { get; set; } = DateTime.UtcNow;
+
+        // ✅ NOU: Many-to-Many relație cu InformatiiSensibile
+        public ICollection<InformatieImagine> InformatiiSensibile { get; set; } = new List<InformatieImagine>();
     }
 }

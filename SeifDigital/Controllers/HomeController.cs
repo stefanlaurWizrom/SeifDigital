@@ -17,12 +17,18 @@ namespace SeifDigital.Controllers
         private readonly ApplicationDbContext _context;
         private readonly AuditService _audit;
         private readonly EncryptionService _crypto;
+        private readonly UserFileService _userFileService;  // ✅ NOU
 
-        public HomeController(ApplicationDbContext context, EncryptionService crypto, AuditService audit)
+        public HomeController(
+            ApplicationDbContext context, 
+            EncryptionService crypto, 
+            AuditService audit,
+            UserFileService userFileService)  // ✅ NOU
         {
             _context = context;
             _crypto = crypto;
             _audit = audit;
+            _userFileService = userFileService;  // ✅ NOU
         }
 
         // Pagina principală (căutare + paginare 25/pg)
@@ -434,7 +440,10 @@ namespace SeifDigital.Controllers
                 return RedirectToAction("Index");
             }
 
-            var item = await _context.InformatiiSensibile.AsNoTracking()
+            var item = await _context.InformatiiSensibile
+                .Include(x => x.Imagini)
+                .ThenInclude(x => x.UserFile)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
 
             if (item == null)
@@ -442,6 +451,12 @@ namespace SeifDigital.Controllers
                 TempData["AccessDenied"] = "Înregistrarea nu există sau nu îți aparține.";
                 return RedirectToAction("Index");
             }
+
+            // Colectează ID-urile imaginilor
+            var imageIds = item.Imagini
+                ?.Where(img => img.UserFile != null)
+                .Select(img => img.UserFile_Id)
+                .ToList() ?? new List<long>();
 
             var msg = new SeifDigital.Models.UserMessage
             {
@@ -455,7 +470,12 @@ namespace SeifDigital.Controllers
                 UsernameSalvat = item.UsernameSalvat,
                 DateCriptate = item.DateCriptate,
                 DetaliiCriptate = item.DetaliiCriptate,
-                DetaliiTokens = item.DetaliiTokens
+                DetaliiTokens = item.DetaliiTokens,
+
+                // ✅ NOU: Stochează ID-urile imaginilor ca JSON
+                AttachedImageFileIds = imageIds.Count > 0 
+                    ? System.Text.Json.JsonSerializer.Serialize(imageIds)
+                    : null
             };
 
             _context.UserMessages.Add(msg);
@@ -471,7 +491,8 @@ namespace SeifDigital.Controllers
                     originalId = id,
                     from = senderEmail,
                     to = recipientEmail,
-                    createdUtc = msg.CreatedUtc
+                    createdUtc = msg.CreatedUtc,
+                    imageCount = imageIds.Count
             });
             return RedirectToAction("Index");
         }
@@ -559,6 +580,176 @@ namespace SeifDigital.Controllers
             _audit.Log(HttpContext, "Secret.Edit", "Success", "InformatieSensibila", item.Id.ToString());
 
             return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadImage(int id, IFormFile? imageFile)
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction("Login", "Account");
+
+            string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
+
+            var item = _context.InformatiiSensibile
+                .FirstOrDefault(x => x.Id == id && x.OwnerKey == ownerKey);
+
+            if (item == null)
+            {
+                TempData["Error"] = "Înregistrarea nu există sau nu ai acces.";
+                return RedirectToAction("Index");
+            }
+
+            if (imageFile == null || imageFile.Length == 0)
+            {
+                TempData["Error"] = "Te rog selectează un fișier.";
+                return RedirectToAction("Index");
+            }
+
+            try
+            {
+                var userFile = await _userFileService.UploadImageAsync(imageFile, ownerKey);
+
+                if (userFile != null)
+                {
+                    // Adaugă imagine nouă la colecție
+                    var informatieImagine = new Models.InformatieImagine
+                    {
+                        InformatieSensibila_Id = id,
+                        UserFile_Id = userFile.Id,
+                        CreatedUtc = DateTime.UtcNow
+                    };
+
+                    _context.InformatiiImagini.Add(informatieImagine);
+                    item.LastUpdatedUtc = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+
+                    TempData["Success"] = "Imagine încărcată cu succes!";
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                TempData["Error"] = ex.Message;
+            }
+
+            return RedirectToAction("Index");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteImage(int informationId, long fileId)
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return Forbid();
+
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
+
+            var item = _context.InformatiiSensibile
+                .FirstOrDefault(x => x.Id == informationId && x.OwnerKey == ownerKey);
+
+            if (item == null)
+                return NotFound();
+
+            // Șterge relația din InformatieImagine
+            var informatieImagine = await _context.InformatiiImagini
+                .FirstOrDefaultAsync(x => x.InformatieSensibila_Id == informationId && x.UserFile_Id == fileId);
+
+            if (informatieImagine != null)
+            {
+                _context.InformatiiImagini.Remove(informatieImagine);
+                item.LastUpdatedUtc = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                return Ok(new { success = true, message = "Imagine ștearsă cu succes!" });
+            }
+
+            return NotFound();
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadImage(long fileId)
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return Forbid();
+
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
+
+            var fileData = await _userFileService.GetImageAsync(fileId, ownerKey);
+            if (fileData == null)
+                return NotFound();
+
+            var fileBytes = await _userFileService.GetImageBytesAsync(fileId, ownerKey);
+            if (fileBytes == null)
+                return NotFound();
+
+            return File(fileBytes, fileData.ContentType ?? "application/octet-stream", 
+                $"{Path.GetFileNameWithoutExtension(fileData.OriginalFileName)}{fileData.Extension}");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetImagePreview(long fileId)
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return Forbid();
+
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
+
+            var fileData = await _userFileService.GetImageAsync(fileId, ownerKey);
+            if (fileData == null)
+                return NotFound();
+
+            var fileBytes = await _userFileService.GetImageBytesAsync(fileId, ownerKey);
+            if (fileBytes == null)
+                return NotFound();
+
+            // Determină content-type pe baza extensiei dacă nu e stocat
+            string contentType = fileData.ContentType ?? "image/jpeg";
+
+            if (string.IsNullOrEmpty(fileData.ContentType))
+            {
+                contentType = fileData.Extension?.ToLower() switch
+                {
+                    ".png" => "image/png",
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".gif" => "image/gif",
+                    ".webp" => "image/webp",
+                    _ => "image/jpeg"
+                };
+            }
+
+            return File(fileBytes, contentType);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetInformationImages(int id)
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return Forbid();
+
+            var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
+
+            var item = _context.InformatiiSensibile
+                .FirstOrDefault(x => x.Id == id && x.OwnerKey == ownerKey);
+
+            if (item == null)
+                return NotFound();
+
+            var imagini = await _context.InformatiiImagini
+                .Where(x => x.InformatieSensibila_Id == id)
+                .Include(x => x.UserFile)
+                .OrderByDescending(x => x.CreatedUtc)
+                .Select(x => new
+                {
+                    id = x.UserFile!.Id,
+                    fileName = x.UserFile.OriginalFileName,
+                    extension = x.UserFile.Extension,
+                    sizeBytes = x.UserFile.SizeBytes,
+                    uploadedUtc = x.UserFile.UploadedUtc,
+                    previewUrl = $"/Home/GetImagePreview?fileId={x.UserFile.Id}"
+                })
+                .ToListAsync();
+
+            return Json(new { success = true, images = imagini });
         }
 
     }

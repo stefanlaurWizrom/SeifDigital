@@ -14,6 +14,7 @@ namespace SeifDigital.Data
         public DbSet<UserNote> UserNotes { get; set; }
         public DbSet<UserFile> UserFiles { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
+        public DbSet<InformatieImagine> InformatiiImagini { get; set; }
 
         // Login user/parola
         public DbSet<UserAccount> UserAccounts { get; set; }
@@ -33,13 +34,19 @@ namespace SeifDigital.Data
 
                 e.Property(x => x.OwnerKey).HasMaxLength(256);
                 e.Property(x => x.NumeUtilizator).HasMaxLength(256);
-
                 e.Property(x => x.TitluAplicatie).HasMaxLength(256);
                 e.Property(x => x.UsernameSalvat).HasMaxLength(256);
 
                 e.Property(x => x.DateCriptate);
                 e.Property(x => x.DetaliiCriptate);
                 e.Property(x => x.DetaliiTokens);
+                e.Property(x => x.LastUpdatedUtc).HasColumnType("datetime2(3)");
+
+                // ✅ ACTUALIZAT: Many-to-Many relație prin InformatieImagine
+                e.HasMany(x => x.Imagini)
+                    .WithOne(x => x.InformatieSensibila)
+                    .HasForeignKey(x => x.InformatieSensibila_Id)
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 e.HasIndex(x => x.OwnerKey);
             });
@@ -120,6 +127,28 @@ namespace SeifDigital.Data
             {
                 e.ToTable("UserFile", "dbo");
                 e.HasKey(x => x.Id);
+
+                // ✅ NOU: Many-to-Many relație cu InformatiiSensibile
+                e.HasMany(x => x.InformatiiSensibile)
+                    .WithOne(x => x.UserFile)
+                    .HasForeignKey(x => x.UserFile_Id)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // =========================
+            // InformatieImagine (dbo.InformatieImagine) - Junction table
+            // =========================
+            modelBuilder.Entity<InformatieImagine>(e =>
+            {
+                e.ToTable("InformatieImagine", "dbo");
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.CreatedUtc).HasColumnType("datetime2(3)");
+
+                // Indexes
+                e.HasIndex(x => x.InformatieSensibila_Id);
+                e.HasIndex(x => x.UserFile_Id);
+                e.HasIndex(x => new { x.InformatieSensibila_Id, x.UserFile_Id }).IsUnique(false);
             });
 
             // =========================

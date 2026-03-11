@@ -96,6 +96,33 @@
                                       readonly
                                       placeholder="Parola/Detalii vor apărea aici..."></textarea>
                         </div>
+
+                        <!-- ✅ NOU: Afișare imagini primite -->
+                        @if (!string.IsNullOrWhiteSpace(m.AttachedImageFileIds))
+                        {
+                            <div class="mt-3 border-top pt-2">
+                                <small class="text-muted d-block mb-2">📸 Imagini atasate (apasă "Salvează" pentru a le accesa):</small>
+                                <div class="row g-2">
+                                    @{
+                                        var imageIds = System.Text.Json.JsonSerializer.Deserialize<List<long>>(m.AttachedImageFileIds);
+                                        if (imageIds != null && imageIds.Count > 0)
+                                        {
+                                            @foreach (var imgId in imageIds)
+                                            {
+                                                <div class="col-md-3">
+                                                    <div class="border rounded p-1">
+                                                        <div class="bg-light rounded" style="height: 100px; display: flex; align-items: center; justify-content: center;">
+                                                            <small class="text-muted">🖼️ Imagine<br>@imageIds.IndexOf(imgId) + 1/@imageIds.Count</small>
+                                                        </div>
+                                                        <small class="text-muted d-block mt-1">Se va copia la salvare</small>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
                     }
                 </div>
             }

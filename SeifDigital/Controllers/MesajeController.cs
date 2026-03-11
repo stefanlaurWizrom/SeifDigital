@@ -11,12 +11,14 @@ namespace SeifDigital.Controllers
         private readonly ApplicationDbContext _db;
         private readonly AuditService _audit;
         private readonly EncryptionService _crypto;
+        private readonly UserFileService _userFileService;
 
-        public MesajeController(ApplicationDbContext db, AuditService audit, EncryptionService crypto)
+        public MesajeController(ApplicationDbContext db, AuditService audit, EncryptionService crypto, UserFileService userFileService)
         {
             _db = db;
             _audit = audit;
             _crypto = crypto;
+            _userFileService = userFileService;
         }
 
         [HttpGet]
@@ -132,6 +134,47 @@ namespace SeifDigital.Controllers
                 };
 
                 _db.InformatiiSensibile.Add(nou);
+
+                // ✅ ACTUALIZAT: Copiază fișierele fizice pentru noul utilizator
+                if (!string.IsNullOrWhiteSpace(msg.AttachedImageFileIds))
+                {
+                    try
+                    {
+                        var imageIds = System.Text.Json.JsonSerializer.Deserialize<List<long>>(msg.AttachedImageFileIds);
+                        if (imageIds != null && imageIds.Count > 0)
+                        {
+                            // Salvează mai întâi noua înregistrare pentru a avea ID
+                            await _db.SaveChangesAsync();
+
+                            // Copiază fișierele pentru noul utilizator
+                            var newImageIds = new List<long>();
+                            foreach (var fileId in imageIds)
+                            {
+                                var copiedFile = await _userFileService.CopyImageForUserAsync(fileId, ownerKey);
+                                if (copiedFile != null)
+                                {
+                                    newImageIds.Add(copiedFile.Id);
+                                }
+                            }
+
+                            // Leagă fișierele copiate la noua înregistrare
+                            foreach (var newFileId in newImageIds)
+                            {
+                                var informatieImagine = new SeifDigital.Models.InformatieImagine
+                                {
+                                    InformatieSensibila_Id = nou.Id,
+                                    UserFile_Id = newFileId,
+                                    CreatedUtc = DateTime.UtcNow
+                                };
+                                _db.InformatiiImagini.Add(informatieImagine);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Ignoră erori în copierea imaginilor, dar salvează secretul
+                    }
+                }
             }
             else if (msg.SourceType == "Notes")
             {
