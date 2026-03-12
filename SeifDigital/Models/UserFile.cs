@@ -32,7 +32,10 @@ namespace SeifDigital.Models
 
         public DateTime UploadedUtc { get; set; } = DateTime.UtcNow;
 
-        // ✅ NOU: Many-to-Many relație cu InformatiiSensibile
-        public ICollection<InformatieImagine> InformatiiSensibile { get; set; } = new List<InformatieImagine>();
+        [MaxLength(50)]
+        public string FileCategory { get; set; } = "image"; // "image", "document", "certificate"
+
+        // ✅ ACTUALIZAT: Many-to-Many relație cu InformatiiSensibile (nu doar imagini)
+        public ICollection<InformatieFisier> InformatiiSensibile { get; set; } = new List<InformatieFisier>();
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SeifDigital.Data;
 using SeifDigital.Services;
 using SeifDigital.Utils;
+using System.Text.Json;
 
 namespace SeifDigital.Controllers
 {
@@ -135,44 +136,55 @@ namespace SeifDigital.Controllers
 
                 _db.InformatiiSensibile.Add(nou);
 
-                // ✅ ACTUALIZAT: Copiază fișierele fizice pentru noul utilizator
+                // ✅ ACTUALIZAT: Copiază TOȚI fișierii cu FileType pentru noul utilizator
                 if (!string.IsNullOrWhiteSpace(msg.AttachedImageFileIds))
                 {
                     try
                     {
-                        var imageIds = System.Text.Json.JsonSerializer.Deserialize<List<long>>(msg.AttachedImageFileIds);
-                        if (imageIds != null && imageIds.Count > 0)
-                        {
-                            // Salvează mai întâi noua înregistrare pentru a avea ID
-                            await _db.SaveChangesAsync();
+                        // Salvează mai întâi noua înregistrare pentru a avea ID
+                        await _db.SaveChangesAsync();
 
-                            // Copiază fișierele pentru noul utilizator
-                            var newImageIds = new List<long>();
-                            foreach (var fileId in imageIds)
+                        // Deserializează array de {fileId, fileType} folosind JsonDocument (mai sigur)
+                        using (var doc = JsonDocument.Parse(msg.AttachedImageFileIds))
+                        {
+                            var root = doc.RootElement;
+                            if (root.ValueKind == JsonValueKind.Array)
                             {
-                                var copiedFile = await _userFileService.CopyImageForUserAsync(fileId, ownerKey);
-                                if (copiedFile != null)
+                                foreach (var element in root.EnumerateArray())
                                 {
-                                    newImageIds.Add(copiedFile.Id);
+                                    try
+                                    {
+                                        // Extrage fileId și fileType
+                                        long fileId = element.GetProperty("fileId").GetInt64();
+                                        string fileType = element.GetProperty("fileType").GetString() ?? "image";
+
+                                        var copiedFile = await _userFileService.CopyImageForUserAsync(fileId, ownerKey);
+                                        if (copiedFile != null)
+                                        {
+                                            // ✅ ACTUALIZAT: Crează InformatieFisier cu FileType
+                                            var informatieImagine = new SeifDigital.Models.InformatieFisier
+                                            {
+                                                InformatieSensibila_Id = nou.Id,
+                                                UserFile_Id = copiedFile.Id,
+                                                FileType = fileType,
+                                                CreatedUtc = DateTime.UtcNow
+                                            };
+                                            _db.InformatiiImagini_New.Add(informatieImagine);
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Continuă cu următorul fișier dacă ceva merge prost
+                                        continue;
+                                    }
                                 }
                             }
-
-                            // Leagă fișierele copiate la noua înregistrare
-                            foreach (var newFileId in newImageIds)
-                            {
-                                var informatieImagine = new SeifDigital.Models.InformatieImagine
-                                {
-                                    InformatieSensibila_Id = nou.Id,
-                                    UserFile_Id = newFileId,
-                                    CreatedUtc = DateTime.UtcNow
-                                };
-                                _db.InformatiiImagini.Add(informatieImagine);
-                            }
                         }
+                        await _db.SaveChangesAsync();
                     }
                     catch
                     {
-                        // Ignoră erori în copierea imaginilor, dar salvează secretul
+                        // Ignoră erori în copierea fișierelor, dar salvează secretul
                     }
                 }
             }

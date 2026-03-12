@@ -14,7 +14,8 @@ namespace SeifDigital.Data
         public DbSet<UserNote> UserNotes { get; set; }
         public DbSet<UserFile> UserFiles { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
-        public DbSet<InformatieImagine> InformatiiImagini { get; set; }
+        public DbSet<InformatieImagine> InformatiiImagini { get; set; } // ✅ Keep for backward compatibility
+        public DbSet<InformatieFisier> InformatiiImagini_New { get; set; } // ✅ Nou: Generic files
 
         // Login user/parola
         public DbSet<UserAccount> UserAccounts { get; set; }
@@ -42,8 +43,8 @@ namespace SeifDigital.Data
                 e.Property(x => x.DetaliiTokens);
                 e.Property(x => x.LastUpdatedUtc).HasColumnType("datetime2(3)");
 
-                // ✅ ACTUALIZAT: Many-to-Many relație prin InformatieImagine
-                e.HasMany(x => x.Imagini)
+                // ✅ ACTUALIZAT: Many-to-Many relație prin InformatieFisier (generic)
+                e.HasMany(x => x.Fisieri)
                     .WithOne(x => x.InformatieSensibila)
                     .HasForeignKey(x => x.InformatieSensibila_Id)
                     .OnDelete(DeleteBehavior.Cascade);
@@ -144,6 +145,34 @@ namespace SeifDigital.Data
                 e.HasKey(x => x.Id);
 
                 e.Property(x => x.CreatedUtc).HasColumnType("datetime2(3)");
+
+                // Indexes
+                e.HasIndex(x => x.InformatieSensibila_Id);
+                e.HasIndex(x => x.UserFile_Id);
+                e.HasIndex(x => new { x.InformatieSensibila_Id, x.UserFile_Id }).IsUnique(false);
+            });
+
+            // =========================
+            // InformatieFisier (dbo.InformatieFisier) - Generic files junction
+            // =========================
+            modelBuilder.Entity<InformatieFisier>(e =>
+            {
+                e.ToTable("InformatieFisier", "dbo");
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.FileType).HasMaxLength(50).IsRequired();
+                e.Property(x => x.CreatedUtc).HasColumnType("datetime2(3)");
+
+                // Foreign keys
+                e.HasOne(x => x.InformatieSensibila)
+                    .WithMany(x => x.Fisieri)
+                    .HasForeignKey(x => x.InformatieSensibila_Id)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                e.HasOne(x => x.UserFile)
+                    .WithMany(x => x.InformatiiSensibile)
+                    .HasForeignKey(x => x.UserFile_Id)
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 // Indexes
                 e.HasIndex(x => x.InformatieSensibila_Id);

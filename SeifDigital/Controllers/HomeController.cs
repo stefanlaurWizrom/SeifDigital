@@ -364,10 +364,10 @@ namespace SeifDigital.Controllers
             }
         }
 
-        // ====== ȘTERGERE: șterge doar înregistrarea ownerKey curent ======
+        // ====== ȘTERGERE: șterge înregistrarea + fișierele atasate ======
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Sterge(int id)
+        public async Task<IActionResult> Sterge(int id)
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
             {
@@ -384,8 +384,10 @@ namespace SeifDigital.Controllers
 
             string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
 
-            var item = _context.InformatiiSensibile
-                .FirstOrDefault(x => x.Id == id && x.OwnerKey == ownerKey);
+            var item = await _context.InformatiiSensibile
+                .Include(x => x.Fisieri)
+                .ThenInclude(x => x.UserFile)
+                .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
 
             if (item == null)
             {
@@ -400,16 +402,43 @@ namespace SeifDigital.Controllers
             }
 
             var titlu = item.TitluAplicatie;
+            var fileCount = 0;
 
+            // ✅ NOU: Șterge fișierele fizice din disc + din DB
+            if (item.Fisieri != null && item.Fisieri.Count > 0)
+            {
+                // ✅ FIX: Fă copie a listei pentru a evita "Collection was modified" eroare
+                var fisiersCopy = item.Fisieri.ToList();
+
+                foreach (var fisier in fisiersCopy)
+                {
+                    if (fisier.UserFile != null)
+                    {
+                        try
+                        {
+                            // Șterg fișierul fizic
+                            await _userFileService.DeleteImageAsync(fisier.UserFile_Id, ownerKey);
+                            fileCount++;
+                        }
+                        catch
+                        {
+                            // Continuă chiar dacă ștergerea fizică eșuează
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            // Șterg înregistrarea (relațiile InormatieFisier vor fi șterse automat datorită cascade delete)
             _context.InformatiiSensibile.Remove(item);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             _audit.Log(HttpContext,
                 eventType: "Secret.Delete",
                 outcome: "Success",
                 targetType: "Secret",
                 targetId: id.ToString(),
-                details: new { titlu });
+                details: new { titlu, filesDeleted = fileCount });
 
             return RedirectToAction("Index");
         }
@@ -441,7 +470,7 @@ namespace SeifDigital.Controllers
             }
 
             var item = await _context.InformatiiSensibile
-                .Include(x => x.Imagini)
+                .Include(x => x.Fisieri)
                 .ThenInclude(x => x.UserFile)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
@@ -452,11 +481,15 @@ namespace SeifDigital.Controllers
                 return RedirectToAction("Index");
             }
 
-            // Colectează ID-urile imaginilor
-            var imageIds = item.Imagini
-                ?.Where(img => img.UserFile != null)
-                .Select(img => img.UserFile_Id)
-                .ToList() ?? new List<long>();
+            // ✅ Colectează TOȚI fișierii cu tipul lor
+            var attachedFiles = new List<object>();
+            if (item.Fisieri != null)
+            {
+                foreach (var file in item.Fisieri.Where(f => f.UserFile != null))
+                {
+                    attachedFiles.Add(new { fileId = file.UserFile_Id, fileType = file.FileType });
+                }
+            }
 
             var msg = new SeifDigital.Models.UserMessage
             {
@@ -472,9 +505,9 @@ namespace SeifDigital.Controllers
                 DetaliiCriptate = item.DetaliiCriptate,
                 DetaliiTokens = item.DetaliiTokens,
 
-                // ✅ NOU: Stochează ID-urile imaginilor ca JSON
-                AttachedImageFileIds = imageIds.Count > 0 
-                    ? System.Text.Json.JsonSerializer.Serialize(imageIds)
+                // ✅ ACTUALIZAT: Stochează fișierele cu FileType ca JSON
+                AttachedImageFileIds = attachedFiles.Count > 0 
+                    ? System.Text.Json.JsonSerializer.Serialize(attachedFiles)
                     : null
             };
 
@@ -492,7 +525,7 @@ namespace SeifDigital.Controllers
                     from = senderEmail,
                     to = recipientEmail,
                     createdUtc = msg.CreatedUtc,
-                    imageCount = imageIds.Count
+                    fileCount = attachedFiles.Count
             });
             return RedirectToAction("Index");
         }
@@ -584,7 +617,7 @@ namespace SeifDigital.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UploadImage(int id, IFormFile? imageFile)
+        public async Task<IActionResult> UploadImage(int id, IFormFile? imageFile, string fileType = "image")
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
                 return RedirectToAction("Login", "Account");
@@ -596,40 +629,46 @@ namespace SeifDigital.Controllers
 
             if (item == null)
             {
-                TempData["Error"] = "Înregistrarea nu există sau nu ai acces.";
+                TempData["Error"] = "❌ Înregistrarea nu există sau nu ai acces.";
                 return RedirectToAction("Index");
             }
 
             if (imageFile == null || imageFile.Length == 0)
             {
-                TempData["Error"] = "Te rog selectează un fișier.";
+                TempData["Error"] = "❌ Te rog selectează un fișier.";
                 return RedirectToAction("Index");
             }
 
             try
             {
-                var userFile = await _userFileService.UploadImageAsync(imageFile, ownerKey);
+                // Validare strictă cu mesaj descriptiv
+                var userFile = await _userFileService.UploadFileAsync(imageFile, ownerKey, fileType);
 
                 if (userFile != null)
                 {
-                    // Adaugă imagine nouă la colecție
-                    var informatieImagine = new Models.InformatieImagine
+                    // Adaugă fișier nou la colecție
+                    var informatieImagine = new Models.InformatieFisier
                     {
                         InformatieSensibila_Id = id,
                         UserFile_Id = userFile.Id,
+                        FileType = fileType,
                         CreatedUtc = DateTime.UtcNow
                     };
 
-                    _context.InformatiiImagini.Add(informatieImagine);
+                    _context.InformatiiImagini_New.Add(informatieImagine);
                     item.LastUpdatedUtc = DateTime.UtcNow;
                     await _context.SaveChangesAsync();
 
-                    TempData["Success"] = "Imagine încărcată cu succes!";
+                    TempData["Success"] = $"✅ Fișier {fileType} încărcat cu succes!";
                 }
             }
             catch (InvalidOperationException ex)
             {
-                TempData["Error"] = ex.Message;
+                TempData["Error"] = ex.Message; // Mesaj specific de validare
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"❌ Eroare la încărcarea fișierului: {ex.Message}";
             }
 
             return RedirectToAction("Index");
@@ -650,17 +689,36 @@ namespace SeifDigital.Controllers
             if (item == null)
                 return NotFound();
 
-            // Șterge relația din InformatieImagine
-            var informatieImagine = await _context.InformatiiImagini
+            // ✅ ACTUALIZAT: Șterge în ordinea corectă
+            var informatieImagine = await _context.InformatiiImagini_New
                 .FirstOrDefaultAsync(x => x.InformatieSensibila_Id == informationId && x.UserFile_Id == fileId);
 
             if (informatieImagine != null)
             {
-                _context.InformatiiImagini.Remove(informatieImagine);
-                item.LastUpdatedUtc = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
+                try
+                {
+                    // 1️⃣ Șterge relația din DB MAI ÎNTÂI
+                    _context.InformatiiImagini_New.Remove(informatieImagine);
+                    item.LastUpdatedUtc = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
 
-                return Ok(new { success = true, message = "Imagine ștearsă cu succes!" });
+                    // 2️⃣ După ștergerea relației, șterg fișierul fizic
+                    var result = await _userFileService.DeleteImageAsync(fileId, ownerKey);
+
+                    if (result)
+                    {
+                        return Ok(new { success = true, message = "✅ Fișier șters cu succes!" });
+                    }
+                    else
+                    {
+                        // Fișierul fizic nu s-a șters, dar relația a fost ștearsă - e OK
+                        return Ok(new { success = true, message = "✅ Fișier șters din înregistrare!" });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    return BadRequest(new { success = false, message = $"❌ Eroare: {ex.Message}" });
+                }
             }
 
             return NotFound();
@@ -734,7 +792,8 @@ namespace SeifDigital.Controllers
             if (item == null)
                 return NotFound();
 
-            var imagini = await _context.InformatiiImagini
+            // ✅ ACTUALIZAT: Citește din InformatiiImagini_New (InformatieFisier) nu din InformatiiImagini
+            var imagini = await _context.InformatiiImagini_New
                 .Where(x => x.InformatieSensibila_Id == id)
                 .Include(x => x.UserFile)
                 .OrderByDescending(x => x.CreatedUtc)

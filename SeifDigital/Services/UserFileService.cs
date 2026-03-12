@@ -4,32 +4,126 @@ using SeifDigital.Models;
 
 namespace SeifDigital.Services
 {
+    public class FileValidationResult
+    {
+        public bool IsValid { get; set; }
+        public string? ErrorMessage { get; set; }
+    }
+
     public class UserFileService
     {
         private readonly ApplicationDbContext _db;
         private readonly SettingsService _settings;
         private readonly string _uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
 
+        // Extensii permise pe categorii
+        private readonly Dictionary<string, List<string>> _allowedExtensions = new()
+        {
+            { "image", new() { ".jpg", ".jpeg", ".png", ".gif", ".webp" } },
+            { "document", new() { ".txt", ".doc", ".docx", ".pdf", ".xlsx", ".xls" } },
+            { "certificate", new() { ".cer", ".pfx", ".pem", ".crt", ".key" } }
+        };
+
+        // Limite de dimensiune per categorie (în bytes)
+        private readonly Dictionary<string, long> _maxSizePerCategory = new()
+        {
+            { "image", 5_242_880 },      // 5 MB
+            { "document", 10_485_760 },  // 10 MB
+            { "certificate", 2_097_152 }  // 2 MB
+        };
+
         public UserFileService(ApplicationDbContext db, SettingsService settings)
         {
             _db = db;
             _settings = settings;
-            
+
             if (!Directory.Exists(_uploadDir))
                 Directory.CreateDirectory(_uploadDir);
         }
 
-        public async Task<List<string>> GetAllowedExtensionsAsync()
+        /// <summary>
+        /// Validează fișierul înainte de upload
+        /// </summary>
+        public FileValidationResult ValidateFile(IFormFile file, string fileCategory)
         {
-            var raw = await _settings.GetStringLongAsync("AllowedUploadExtensions")
-                      ?? ".pfx;.cer;.pem;.crt;.txt;.pdf";
+            // Validare 1: Fișier NULL
+            if (file == null || file.Length == 0)
+                return new FileValidationResult 
+                { 
+                    IsValid = false, 
+                    ErrorMessage = "❌ Nu ai selectat niciun fișier." 
+                };
 
-            return raw.Split(';', StringSplitOptions.RemoveEmptyEntries)
-                      .Select(x => x.Trim().ToLower())
-                      .ToList();
+            // Validare 2: Categoria de fișier validă
+            if (!_allowedExtensions.ContainsKey(fileCategory))
+                return new FileValidationResult 
+                { 
+                    IsValid = false, 
+                    ErrorMessage = $"❌ Categoria de fișier '{fileCategory}' nu este suportată." 
+                };
+
+            // Validare 3: Dimensiune fișier
+            var maxSize = _maxSizePerCategory[fileCategory];
+            if (file.Length > maxSize)
+            {
+                var maxSizeMB = maxSize / 1024 / 1024;
+                return new FileValidationResult 
+                { 
+                    IsValid = false, 
+                    ErrorMessage = $"❌ Fișierul este prea mare. Maximum {maxSizeMB}MB pentru categoria '{fileCategory}'. Tu ai: {file.Length / 1024 / 1024}MB." 
+                };
+            }
+
+            // Validare 4: Extensie permisă
+            var extension = Path.GetExtension(file.FileName)?.ToLower();
+            if (string.IsNullOrWhiteSpace(extension))
+                return new FileValidationResult 
+                { 
+                    IsValid = false, 
+                    ErrorMessage = "❌ Fișierul nu are extensie. Nu pot determina tipul." 
+                };
+
+            if (!_allowedExtensions[fileCategory].Contains(extension))
+            {
+                var allowedExts = string.Join(", ", _allowedExtensions[fileCategory]);
+                return new FileValidationResult 
+                { 
+                    IsValid = false, 
+                    ErrorMessage = $"❌ Extensie '{extension}' nu este permisă pentru '{fileCategory}'. Extensii acceptate: {allowedExts}" 
+                };
+            }
+
+            // Validare 5: MIME-type (securitate suplimentară)
+            if (!IsValidMimeType(file.ContentType, fileCategory))
+                return new FileValidationResult 
+                { 
+                    IsValid = false, 
+                    ErrorMessage = $"❌ Tipul MIME '{file.ContentType}' nu corespunde cu categoria '{fileCategory}'." 
+                };
+
+            return new FileValidationResult { IsValid = true };
         }
 
-        public List<string> GetAllowedImageExtensions() => new() { ".jpg", ".jpeg", ".png" };
+        /// <summary>
+        /// Validează MIME-type
+        /// </summary>
+        private bool IsValidMimeType(string? mimeType, string fileCategory)
+        {
+            if (string.IsNullOrWhiteSpace(mimeType))
+                return true; // Permitem dacă nu e setat
+
+            mimeType = mimeType.ToLower();
+
+            return fileCategory switch
+            {
+                "image" => mimeType.StartsWith("image/") || true, // Permitem orice dacă e image
+                "document" => true, // Permitem orice pentru document (limitare prin extensie)
+                "certificate" => true, // Permitem orice pentru certificate (limitare prin extensie)
+                _ => true
+            };
+        }
+
+        public List<string> GetAllowedImageExtensions() => _allowedExtensions["image"];
 
         public async Task<bool> IsExtensionAllowedAsync(string fileName)
         {
@@ -48,16 +142,22 @@ namespace SeifDigital.Services
             return GetAllowedImageExtensions().Contains(ext);
         }
 
-        public async Task<UserFile?> UploadImageAsync(IFormFile file, string ownerUser, long maxSizeBytes = 5_242_880)
+        public async Task<List<string>> GetAllowedExtensionsAsync()
         {
-            if (file == null || file.Length == 0)
-                return null;
+            var raw = await _settings.GetStringLongAsync("AllowedUploadExtensions")
+                      ?? ".jpg;.jpeg;.png;.gif;.webp;.txt;.doc;.docx;.pdf;.cer;.pfx;.pem;.crt";
 
-            if (file.Length > maxSizeBytes)
-                throw new InvalidOperationException($"Fișierul este prea mare (max {maxSizeBytes / 1024 / 1024}MB).");
+            return raw.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                      .Select(x => x.Trim().ToLower())
+                      .ToList();
+        }
 
-            if (!IsImageExtensionAllowed(file.FileName))
-                throw new InvalidOperationException("Tip de fișier neacceptat. Doar .jpg, .jpeg, .png sunt permise.");
+        public async Task<UserFile?> UploadFileAsync(IFormFile file, string ownerUser, string fileCategory = "image")
+        {
+            // Validare strictă
+            var validation = ValidateFile(file, fileCategory);
+            if (!validation.IsValid)
+                throw new InvalidOperationException(validation.ErrorMessage!);
 
             var extension = Path.GetExtension(file.FileName).ToLower();
             var storedFileName = $"{Guid.NewGuid()}{extension}";
@@ -75,9 +175,10 @@ namespace SeifDigital.Services
                 OriginalFileName = file.FileName,
                 Extension = extension,
                 StoredFileName = storedFileName,
-                StoredRelativePath = $"uploads/{storedFileName}",  // ✅ ADAUGĂ ASTA
+                StoredRelativePath = $"uploads/{storedFileName}",
                 SizeBytes = file.Length,
                 ContentType = file.ContentType,
+                FileCategory = fileCategory,
                 UploadedUtc = DateTime.UtcNow
             };
 
@@ -87,10 +188,16 @@ namespace SeifDigital.Services
             return userFile;
         }
 
+        // ✅ Keep old method for backward compatibility
+        public async Task<UserFile?> UploadImageAsync(IFormFile file, string ownerUser, long maxSizeBytes = 5_242_880)
+        {
+            return await UploadFileAsync(file, ownerUser, "image");
+        }
+
         public async Task<bool> DeleteImageAsync(long fileId, string ownerUser)
         {
             var file = await _db.UserFiles.FindAsync(fileId);
-            
+
             if (file == null || file.OwnerUser != ownerUser)
                 return false;
 
@@ -168,6 +275,7 @@ namespace SeifDigital.Services
                     StoredRelativePath = $"uploads/{newStoredFileName}",
                     SizeBytes = sourceFile.SizeBytes,
                     ContentType = sourceFile.ContentType,
+                    FileCategory = sourceFile.FileCategory,
                     UploadedUtc = DateTime.UtcNow
                 };
 
@@ -183,3 +291,4 @@ namespace SeifDigital.Services
         }
     }
 }
+

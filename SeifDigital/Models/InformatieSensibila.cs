@@ -17,8 +17,8 @@ namespace SeifDigital.Models
 
         public DateTime? LastUpdatedUtc { get; set; }
 
-        // ✅ ACTUALIZAT: Many-to-Many relație cu imagini
-        public ICollection<InformatieImagine> Imagini { get; set; } = new List<InformatieImagine>();
+        // ✅ ACTUALIZAT: Many-to-Many relație cu fișiere (nu doar imagini)
+        public ICollection<InformatieFisier> Fisieri { get; set; } = new List<InformatieFisier>();
 
         [NotMapped]
         public string? ParolaDecriptata { get; set; }

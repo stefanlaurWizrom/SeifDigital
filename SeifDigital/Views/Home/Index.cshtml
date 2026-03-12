@@ -31,6 +31,31 @@
     @* Token folosit de fetch (AJAX) *@
     @Html.AntiForgeryToken()
 
+    <!-- ✅ Afișare notificări (Success/Error) -->
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (TempData["AccessDenied"] != null)
+    {
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            @TempData["AccessDenied"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
     <h2 class="mb-1">Parole</h2>
 
     <div class="text-muted mb-2">
@@ -268,47 +293,53 @@
     </div>
 </div>
 
-@* ✅ NOU: Modal pentru upload imagine *@
+@* ✅ NOU: Modal pentru fișiere (imagini, documente, certificate) - FĂRĂ validare form *@
 <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form id="imageUploadForm" method="post" asp-action="UploadImage" enctype="multipart/form-data">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="id" id="imageUploadId" value="" />
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" id="imageUploadId" value="" />
+            <input type="hidden" name="fileType" id="fileType" value="image" />
 
-                <div class="modal-header">
-                    <h5 class="modal-title">Imagine pentru detalii</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-header">
+                <h5 class="modal-title">📁 Fișiere pentru înregistrare</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Fișiere existente -->
+                <div id="imagePreviewContainer" class="mb-4">
+                    <!-- Se populează din JS -->
                 </div>
 
-                <div class="modal-body">
-                    <!-- Imagine existentă -->
-                    <div id="imagePreviewContainer" class="mb-4">
-                        <!-- Se populează din JS -->
+                <!-- Upload fișier - CU BUTON SEPARAT -->
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0">📤 Adauga fișiere noi</h6>
                     </div>
-
-                    <!-- Formular upload -->
-                    <div class="card">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">Încarcă imagine nouă</h6>
-                        </div>
-                        <div class="card-body">
-                            <label for="imageFileInput" class="form-label">Selectează imagine (JPG, PNG)</label>
+                    <div class="card-body">
+                        <label for="imageFileInput" class="form-label">Selectează fișier</label>
+                        <div class="input-group mb-2">
                             <input type="file" 
                                    id="imageFileInput" 
-                                   name="imageFile" 
-                                   accept=".jpg,.jpeg,.png" 
+                                   accept=".jpg,.jpeg,.png,.gif,.webp,.txt,.doc,.docx,.pdf,.xlsx,.xls,.cer,.pfx,.pem,.crt,.key" 
                                    class="form-control" />
-                            <small class="text-muted">Max 5MB</small>
+                            <button type="button" class="btn btn-outline-primary" id="btnUploadFile">
+                                ⬆️ Incarcă
+                            </button>
                         </div>
+                        <small class="text-muted">
+                            📸 Imagini (JPG, PNG, GIF, WEBP) - Max 5MB | 
+                            📄 Documente (TXT, DOC, DOCX, PDF, XLSX) - Max 10MB | 
+                            🔐 Certificate (CER, PFX, PEM, CRT, KEY) - Max 2MB
+                        </small>
                     </div>
                 </div>
+            </div>
 
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Renunță</button>
-                    <button type="submit" class="btn btn-primary">Salvează</button>
-                </div>
-            </form>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Inchide</button>
+            </div>
         </div>
     </div>
 </div>
@@ -666,9 +697,9 @@
             modal.show();
         }
 
-        // ===== Șterge imagine din galerie =====
+        // ===== Șterge fișier din galerie =====
         async function deleteImage(informationId, fileId) {
-            if (!confirm('Sigur vrei să ștergi această imagine?')) return;
+            if (!confirm('Sigur vrei să ștergi acest fișier?')) return;
 
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
             const token = tokenInput ? tokenInput.value : '';
@@ -683,18 +714,27 @@
                 });
 
                 if (response.ok) {
-                    // Reîncarcă imagini
-                    openImageModal(informationId);
+                    alert('✅ Fișier șters cu succes!');
+                    // ✅ INCHIDE modalul complet și curață backdrop-ul
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('imageModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
+                    // Asigură că backdrop-ul e eliminat
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    // Refă body-ul la starea normală
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
                 } else {
-                    alert('Eroare la ștergerea imaginii.');
+                    alert('❌ Eroare la ștergerea fișierului.');
                 }
             } catch (e) {
                 console.error(e);
-                alert('Eroare de rețea.');
+                alert('❌ Eroare de rețea.');
             }
         }
 
-        // ===== NOU: Previzualizare imagine încărcată (din modal) =====
+        // ===== NOU: Detectare fileType și preview =====
         document.getElementById("imageFileInput")?.addEventListener("change", function() {
             const file = this.files[0];
             const previewContainer = document.getElementById("imagePreviewContainer");
@@ -703,18 +743,105 @@
             previewContainer.innerHTML = "";
 
             if (file) {
-                const reader = new FileReader();
+                // Detectează fileType pe baza extensiei
+                const ext = file.name.toLowerCase().split('.').pop();
+                let fileType = "image"; // default
 
-                reader.onload = function(e) {
-                    const img = document.createElement("img");
-                    img.src = e.target.result;
-                    img.classList.add("img-fluid");
-                    img.style.maxHeight = "400px";
-                    img.style.objectFit = "contain";
-                    previewContainer.appendChild(img);
-                };
+                // Detectează categoria pe baza extensiei
+                if ([".jpg", ".jpeg", ".png", ".gif", ".webp"].includes("." + ext)) {
+                    fileType = "image";
+                } else if ([".txt", ".doc", ".docx", ".pdf", ".xlsx", ".xls"].includes("." + ext)) {
+                    fileType = "document";
+                } else if ([".cer", ".pfx", ".pem", ".crt", ".key"].includes("." + ext)) {
+                    fileType = "certificate";
+                }
 
-                reader.readAsDataURL(file);
+                // Setează fileType hidden input
+                document.getElementById("fileType").value = fileType;
+
+                // Preview pentru imagini
+                if (fileType === "image") {
+                    const reader = new FileReader();
+
+                    reader.onload = function(e) {
+                        const img = document.createElement("img");
+                        img.src = e.target.result;
+                        img.classList.add("img-fluid");
+                        img.style.maxHeight = "400px";
+                        img.style.objectFit = "contain";
+                        previewContainer.appendChild(img);
+                    };
+
+                    reader.readAsDataURL(file);
+                } else {
+                    // Pentru alte tipuri, afișează info despre fișier
+                    const info = document.createElement("div");
+                    info.className = "alert alert-info";
+                    info.innerHTML = `
+                        <strong>📄 ${fileType.toUpperCase()}</strong><br>
+                        Fișier: ${file.name}<br>
+                        Mărime: ${(file.size / 1024).toFixed(2)} KB
+                    `;
+                    previewContainer.appendChild(info);
+                }
+            }
+        });
+
+        // ===== Upload via AJAX (fără validare form) =====
+        document.getElementById("btnUploadFile")?.addEventListener("click", async function() {
+            const file = document.getElementById("imageFileInput")?.files[0];
+            const id = document.getElementById("imageUploadId").value;
+            const fileType = document.getElementById("fileType").value;
+
+            if (!file) {
+                alert("Te rog selectează un fișier înainte de a incarca.");
+                return;
+            }
+
+            if (!id) {
+                alert("ID înregistrare lipsă.");
+                return;
+            }
+
+            // Crează FormData
+            const formData = new FormData();
+            formData.append("id", id);
+            formData.append("imageFile", file);
+            formData.append("fileType", fileType);
+
+            // Preluatoken CSRF
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            if (tokenInput) {
+                formData.append("__RequestVerificationToken", tokenInput.value);
+            }
+
+            try {
+                const response = await fetch("/Home/UploadImage", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (response.ok) {
+                    alert(`✅ Fișier ${fileType} incărcat cu succes!`);
+                    // Curăță file input
+                    document.getElementById("imageFileInput").value = "";
+                    // ✅ INCHIDE modalul complet și curață backdrop-ul
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('imageModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
+                    // Asigură că backdrop-ul e eliminat
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    // Refă body-ul la starea normală
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                } else {
+                    const text = await response.text();
+                    alert(`❌ Eroare: ${text || "Upload eșuat"}`);
+                }
+            } catch (err) {
+                console.error(err);
+                alert("❌ Eroare de rețea la upload.");
             }
         });
     </script>
