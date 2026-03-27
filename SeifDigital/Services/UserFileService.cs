@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SeifDigital.Data;
 using SeifDigital.Models;
+using Microsoft.AspNetCore.Hosting;
 
 namespace SeifDigital.Services
 {
@@ -14,7 +15,8 @@ namespace SeifDigital.Services
     {
         private readonly ApplicationDbContext _db;
         private readonly SettingsService _settings;
-        private readonly string _uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+        private readonly IWebHostEnvironment _environment;
+        private readonly string _uploadDir;
 
         // Extensii permise pe categorii
         private readonly Dictionary<string, List<string>> _allowedExtensions = new()
@@ -32,13 +34,33 @@ namespace SeifDigital.Services
             { "certificate", 2_097_152 }  // 2 MB
         };
 
-        public UserFileService(ApplicationDbContext db, SettingsService settings)
+        public UserFileService(ApplicationDbContext db, SettingsService settings, IWebHostEnvironment environment)
         {
             _db = db;
             _settings = settings;
+            _environment = environment;
+
+            // ✅ FIXED: Use IWebHostEnvironment.WebRootPath instead of Directory.GetCurrentDirectory()
+            _uploadDir = Path.Combine(_environment.WebRootPath, "uploads");
+
+            // ✅ DEBUG: Log the upload directory path
+            System.Diagnostics.Debug.WriteLine($"[UserFileService] WebRootPath: {_environment.WebRootPath}");
+            System.Diagnostics.Debug.WriteLine($"[UserFileService] UploadDir: {_uploadDir}");
+            System.Diagnostics.Debug.WriteLine($"[UserFileService] UploadDir Exists: {Directory.Exists(_uploadDir)}");
+            System.Diagnostics.Debug.WriteLine($"[UserFileService] ContentRootPath: {_environment.ContentRootPath}");
 
             if (!Directory.Exists(_uploadDir))
-                Directory.CreateDirectory(_uploadDir);
+            {
+                try
+                {
+                    Directory.CreateDirectory(_uploadDir);
+                    System.Diagnostics.Debug.WriteLine($"[UserFileService] Created directory: {_uploadDir}");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[UserFileService] ERROR creating directory: {ex.Message}");
+                }
+            }
         }
 
         /// <summary>
@@ -163,9 +185,29 @@ namespace SeifDigital.Services
             var storedFileName = $"{Guid.NewGuid()}{extension}";
             var filePath = Path.Combine(_uploadDir, storedFileName);
 
-            using (var stream = new FileStream(filePath, FileMode.Create))
+            // ✅ DEBUG: Log file upload details
+            System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] Starting upload");
+            System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] FileName: {file.FileName}");
+            System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] FileSize: {file.Length} bytes");
+            System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] FileCategory: {fileCategory}");
+            System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] StoredFileName: {storedFileName}");
+            System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] FilePath: {filePath}");
+            System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] Directory exists: {Directory.Exists(_uploadDir)}");
+
+            try
             {
-                await file.CopyToAsync(stream);
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await file.CopyToAsync(stream);
+                }
+                System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] File saved successfully to: {filePath}");
+                System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] File now exists: {File.Exists(filePath)}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] ERROR saving file: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[UploadFileAsync] Exception: {ex}");
+                throw;
             }
 
             // Crează înregistrare în DB
