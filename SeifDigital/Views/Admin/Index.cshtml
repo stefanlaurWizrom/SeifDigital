@@ -1,0 +1,375 @@
+@{
+    ViewData["Title"] = "Admin Panel";
+}
+
+<div class="container mt-4">
+    <h1>Admin Panel</h1>
+
+    <!-- Statistici -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Utilizatori</h5>
+                    <p class="h3 text-primary">@ViewBag.TotalUsers</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Admini</h5>
+                    <p class="h3 text-success">@ViewBag.TotalAdmins</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Parole</h5>
+                    <p class="h3 text-warning">@ViewBag.TotalPasswords</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Note</h5>
+                    <p class="h3 text-info">@ViewBag.TotalNotes</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Secțiunea Utilizatori -->
+    <div class="mt-5">
+        <h2>Utilizatori</h2>
+        <table id="usersTable" class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Email</th>
+                    <th>Admin</th>
+                    <th>Activ</th>
+                    <th>Creat la</th>
+                    <th>Acțiuni</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal pentru resetare parolă și trimitere email -->
+<div id="resetPasswordModal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">🔐 Resetare Parolă</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="resetContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Închide</button>
+                <button type="button" class="btn btn-primary" id="btnSendEmail">
+                    ✉️ Trimite Email
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Variabile globale pentru modal
+    let currentResetData = null;
+    let currentUserId = null;
+    document.addEventListener('DOMContentLoaded', function () {
+        loadUsers();
+    });
+
+    function loadUsers() {
+        fetch('/Admin/GetUsers')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.querySelector('#usersTable tbody');
+                tbody.innerHTML = '';
+
+                data.forEach(user => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${user.id}</td>
+                        <td>${user.email}</td>
+                        <td>
+                            <button class="btn btn-sm ${user.isAdmin ? 'btn-success' : 'btn-secondary'}"
+                                    onclick="toggleAdmin(${user.id}, event)"
+                                    title="Apasă pentru a schimba statusul admin">
+                                ${user.isAdmin ? '✓ Admin' : 'User'}
+                            </button>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm ${user.isActive ? 'btn-success' : 'btn-danger'}"
+                                    onclick="toggleActive(${user.id}, event)"
+                                    title="Apasă pentru a schimba statusul">
+                                ${user.isActive ? '✓ Activ' : '✗ Inactiv'}
+                            </button>
+                        </td>
+                        <td>${new Date(user.createdUtc).toLocaleString('ro-RO')}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button class="btn btn-outline-info" 
+                                        onclick="showUserDetails(${user.id}, event)"
+                                        title="Vezi detalii utilizator">
+                                    📋 Detalii
+                                </button>
+                                <button class="btn btn-outline-warning" 
+                                        onclick="resetUserPassword(${user.id}, '${user.email}', event)"
+                                        title="Resetează parola utilizatorului">
+                                    🔑 Reset Pass
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .catch(error => console.error('Eroare:', error));
+    }
+
+    function toggleAdmin(userId, event) {
+        event.preventDefault();
+
+        if (!confirm('Sigur schimbi statusul admin?')) return;
+
+        fetch(`/Admin/ToggleAdmin?userId=${userId}`, { method: 'POST' })
+            .then(response => {
+                if (response.status === 403) {
+                    alert('Nu ai permisiuni!');
+                    return null;
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data && data.success) {
+                    loadUsers();
+                    alert('Status admin actualizat cu succes!');
+                } else if (data) {
+                    alert('Eroare: ' + (data.message || 'Operație eșuată'));
+                }
+            })
+            .catch(error => {
+                console.error('Eroare:', error);
+                alert('Eroare la actualizare!');
+            });
+    }
+
+    function toggleActive(userId, event) {
+        event.preventDefault();
+
+        if (!confirm('Sigur schimbi statusul activ?')) return;
+
+        fetch(`/Admin/ToggleActive?userId=${userId}`, { method: 'POST' })
+            .then(response => {
+                if (response.status === 403) {
+                    alert('Nu ai permisiuni!');
+                    return null;
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data && data.success) {
+                    loadUsers();
+                    alert('Status activ actualizat cu succes!');
+                } else if (data) {
+                    alert('Eroare: ' + (data.message || 'Operație eșuată'));
+                }
+            })
+            .catch(error => {
+                console.error('Eroare:', error);
+                alert('Eroare la actualizare!');
+            });
+    }
+
+    function showUserDetails(userId, event) {
+        event.preventDefault();
+
+        fetch(`/Admin/UserDetails?userId=${userId}`)
+            .then(response => response.json())
+            .then(user => {
+                const createdDate = new Date(user.createdUtc).toLocaleString('ro-RO');
+                const updatedDate = new Date(user.updatedUtc).toLocaleString('ro-RO');
+
+                const message = `
+📊 DETALII UTILIZATOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📧 Email: ${user.email}
+🔑 ID: ${user.id}
+👤 Status Admin: ${user.isAdmin ? '✓ DA' : '✗ NU'}
+✅ Status Activ: ${user.isActive ? '✓ DA' : '✗ NU'}
+🔐 Parole salvate: ${user.passwordCount}
+📝 Note salvate: ${user.noteCount}
+📅 Creat la: ${createdDate}
+🔄 Actualizat la: ${updatedDate}
+                `;
+
+                alert(message);
+            })
+            .catch(error => {
+                console.error('Eroare:', error);
+                alert('Eroare la preluarea detaliilor!');
+            });
+    }
+
+    function resetUserPassword(userId, email, event) {
+        event.preventDefault();
+
+        if (!confirm(`Sigur resetezi parola pentru ${email}?\n\nVa primi o parolă temporară nouă.`)) 
+            return;
+
+        fetch(`/Admin/ResetPassword?userId=${userId}`, { method: 'POST' })
+            .then(response => {
+                if (response.status === 403) {
+                    alert('Nu ai permisiuni!');
+                    return null;
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data && data.success) {
+                    // Salvează datele pentru modalul de trimitere email
+                    currentResetData = data;
+                    currentUserId = userId;
+
+                    // Afișează conținutul în modal
+                    const content = `
+                        <div class="alert alert-success">
+                            <strong>✅ Parolă resetată cu succes!</strong>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label"><strong>📧 Pentru utilizatorul:</strong></label>
+                            <div class="form-control-plaintext"><strong>${data.email}</strong></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label"><strong>🔑 Parolă temporară:</strong></label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="tempPassword" value="${data.temporaryPassword}" readonly>
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard('tempPassword')">
+                                    📋 Copiază
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label"><strong>✉️ Trimite la emailul:</strong></label>
+                            <input type="email" class="form-control" id="recipientEmail" value="${data.email}" placeholder="Email destinație">
+                            <small class="text-muted">Poți modifica email-ul dacă vrei să o trimiți în alt loc</small>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <strong>⚠️ ATENȚIE:</strong>
+                            <ul class="mb-0 mt-2">
+                                <li>Parola temporară a fost generată</li>
+                                <li>Utilizatorul trebuie să se autentifice și să schimbe parola la prima logare</li>
+                                <li>Apasă "✉️ Trimite Email" pentru a trimite parola utilizatorului</li>
+                                <li>Nu o stoca în locuri nesecurizate</li>
+                            </ul>
+                        </div>
+                    `;
+
+                    document.getElementById('resetContent').innerHTML = content;
+
+                    // Afișează modalul
+                    const modal = new bootstrap.Modal(document.getElementById('resetPasswordModal'));
+                    modal.show();
+
+                    // Setează handler pentru buton Trimite Email
+                    document.getElementById('btnSendEmail').onclick = function() {
+                        sendPasswordResetEmail();
+                    };
+
+                } else if (data) {
+                    alert('Eroare: ' + (data.message || 'Operație eșuată'));
+                }
+            })
+            .catch(error => {
+                console.error('Eroare:', error);
+                alert('Eroare la resetarea parolei!');
+            });
+    }
+
+    // Copiază parola în clipboard
+    function copyToClipboard(elementId) {
+        const element = document.getElementById(elementId);
+        element.select();
+        document.execCommand('copy');
+
+        // Schimbă textul butonului temporar
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = '✓ Copiat!';
+        setTimeout(() => {
+            btn.textContent = originalText;
+        }, 2000);
+    }
+
+    // Trimite parola prin email
+    function sendPasswordResetEmail() {
+        const recipientEmail = document.getElementById('recipientEmail').value;
+
+        if (!recipientEmail) {
+            alert('Introduceți o adresă de email validă');
+            return;
+        }
+
+        // Dezactivează butonul în timp ce trimite
+        const btn = document.getElementById('btnSendEmail');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '⏳ Se trimite...';
+
+        fetch('/Admin/SendPasswordResetEmail', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                userId: currentUserId,
+                temporaryPassword: currentResetData.temporaryPassword,
+                recipientEmail: recipientEmail
+            })
+        })
+        .then(response => {
+            if (response.status === 403) {
+                alert('Nu ai permisiuni!');
+                return null;
+            }
+            return response.json();
+        })
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+
+            if (data && data.success) {
+                alert('✅ Email trimis cu succes la: ' + recipientEmail);
+
+                // Închide modalul
+                const modal = bootstrap.Modal.getInstance(document.getElementById('resetPasswordModal'));
+                if (modal) modal.hide();
+
+                // Reîncarcă utilizatorii
+                loadUsers();
+            } else if (data) {
+                alert('Eroare: ' + (data.message || 'Operație eșuată'));
+            }
+        })
+        .catch(error => {
+            console.error('Eroare:', error);
+            btn.disabled = false;
+            btn.textContent = originalText;
+            alert('Eroare la trimiterea emailului!');
+        });
+    }
+</script>

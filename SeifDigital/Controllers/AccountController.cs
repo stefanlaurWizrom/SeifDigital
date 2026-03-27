@@ -346,6 +346,92 @@ Dacă NU ai cerut acest cod, ignoră acest email.";
             return RedirectToAction(nameof(Login));
         }
 
+        // Change password pentru utilizator logat
+        [HttpGet]
+        public IActionResult ChangePassword()
+        {
+            // Verifică dacă userul e logat
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction(nameof(Login));
+
+            var email = HttpContext.Session.GetString("LoginEmail") ?? "";
+            ViewBag.Email = email;
+            ViewBag.Mesaj = "";
+            return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ChangePassword(string oldPassword, string newPassword, string confirmPassword)
+        {
+            // Verifică dacă userul e logat
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return RedirectToAction(nameof(Login));
+
+            var email = HttpContext.Session.GetString("LoginEmail") ?? "";
+            ViewBag.Email = email;
+
+            // Validări
+            if (string.IsNullOrWhiteSpace(oldPassword))
+            {
+                ViewBag.Mesaj = "Parola actuală este obligatorie.";
+                return View();
+            }
+
+            if (string.IsNullOrWhiteSpace(newPassword))
+            {
+                ViewBag.Mesaj = "Noua parolă este obligatorie.";
+                return View();
+            }
+
+            if (string.IsNullOrWhiteSpace(confirmPassword))
+            {
+                ViewBag.Mesaj = "Confirmarea parolei este obligatorie.";
+                return View();
+            }
+
+            if (newPassword != confirmPassword)
+            {
+                ViewBag.Mesaj = "Noile parole nu coincid.";
+                return View();
+            }
+
+            if (newPassword.Length < 12)
+            {
+                ViewBag.Mesaj = "Noua parolă trebuie să aibă minim 12 caractere.";
+                return View();
+            }
+
+            // Verifică dacă parola veche e corectă
+            var (okValidate, errValidate, acc) = await _accounts.ValidatePasswordAsync(email, oldPassword);
+            if (!okValidate || acc == null)
+            {
+                ViewBag.Mesaj = "Parola actuală este incorectă.";
+                _audit.Log(HttpContext, "Account.ChangePassword", "Fail",
+                    reason: "WrongOldPassword",
+                    details: new { email });
+                return View();
+            }
+
+            // Schimbă parola
+            var (okSet, errSet) = await _accounts.SetPasswordByEmailAsync(email, newPassword);
+            if (!okSet)
+            {
+                ViewBag.Mesaj = errSet;
+                _audit.Log(HttpContext, "Account.ChangePassword", "Fail",
+                    reason: "SetPasswordError",
+                    details: new { email, error = errSet });
+                return View();
+            }
+
+            // Succes
+            _audit.Log(HttpContext, "Account.ChangePassword", "Success",
+                details: new { email });
+
+            TempData["SuccessMsg"] = "Parola a fost schimbată cu succes!";
+            return RedirectToAction("Index", "Home");
+        }
+
         // OTP 6 digits (crypto-safe)
         private static string GenerateOtp6()
         {

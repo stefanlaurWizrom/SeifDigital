@@ -35,6 +35,22 @@ namespace SeifDigital.Controllers
                 .OrderByDescending(x => x.CreatedUtc)
                 .ToListAsync();
 
+            // ✅ Decrypt note text for "Notes" type messages
+            foreach (var item in items)
+            {
+                if (item.SourceType == "Notes" && !string.IsNullOrWhiteSpace(item.NoteText))
+                {
+                    try
+                    {
+                        item.NoteText = _crypto.Decrypt(item.NoteText);
+                    }
+                    catch
+                    {
+                        // If decryption fails (e.g., plain text), keep original
+                    }
+                }
+            }
+
             return View(items);
         }
 
@@ -203,7 +219,18 @@ namespace SeifDigital.Controllers
                 if (rawTitle.Length > 255)
                     rawTitle = rawTitle.Substring(0, 255);
 
+                // ✅ Decrypt the note text from the message before saving
                 var noteText = (msg.NoteText ?? "").Trim();
+                try
+                {
+                    // Try to decrypt (message contains encrypted text)
+                    noteText = _crypto.Decrypt(noteText);
+                }
+                catch
+                {
+                    // If decryption fails, use as-is (might be plain text)
+                }
+
                 if (noteText.Length > 255)
                     noteText = noteText.Substring(0, 255);
 
@@ -212,7 +239,7 @@ namespace SeifDigital.Controllers
                     OwnerKey = ownerKey,
                     OwnerUser = domainUser,
                     Title = rawTitle,
-                    Text = noteText,
+                    Text = _crypto.Encrypt(noteText), // ✅ Re-encrypt for storage
                     CreatedUtc = DateTime.UtcNow,
                     UpdatedUtc = DateTime.UtcNow
                 };

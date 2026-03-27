@@ -1,10 +1,11 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace SeifDigital.Models
 {
     public class UserNote
     {
-        public long Id { get; set; }   // BIGINT în SQL => long în C#
+        public long Id { get; set; }
 
         [MaxLength(256)]
         public string? OwnerKey { get; set; }
@@ -13,14 +14,15 @@ namespace SeifDigital.Models
         [MaxLength(256)]
         public string OwnerUser { get; set; } = "";
 
-        // ✅ NOU
         [Required]
         [MaxLength(255)]
         public string Title { get; set; } = "Fără titlu";
 
+        // ✅ DOAR ACEASTA COLOANĂ - Text criptat direct în DB
+        // Se va mapează la coloana "NoteText" din database
         [Required]
-        [MaxLength(255)]
-        public string Text { get; set; } = ""; // mapat în DB la NoteText
+        [Column("NoteText")]
+        public string Text { get; set; } = "";
 
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;

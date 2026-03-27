@@ -39,6 +39,8 @@
 
                     @if (isLogged && !string.IsNullOrWhiteSpace(loginEmail))
                     {
+                        var isAdmin = Context.Session.GetString("IsAdmin") == "1";
+
                         <ul class="navbar-nav flex-grow-1">
                             <li class="nav-item">
                                 <a class="nav-link @active("Home")" asp-controller="Home" asp-action="Index">Parole</a>
@@ -49,9 +51,34 @@
                             <li class="nav-item">
                                 <a class="nav-link @active("Mesaje")" asp-controller="Mesaje" asp-action="Index">Mesaje</a>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link @active("Audit")" asp-controller="Audit" asp-action="Index">Audit</a>
-                            </li>
+                            @if (isAdmin)
+                            {
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle @(currentController == "admin" || currentController == "audit" ? "active fw-semibold" : "")" 
+                                       href="#" 
+                                       id="adminDropdown" 
+                                       role="button" 
+                                       data-bs-toggle="dropdown" 
+                                       aria-expanded="false">
+                                        ⚙️ Admin
+                                    </a>
+                                    <ul class="dropdown-menu" aria-labelledby="adminDropdown">
+                                        <li>
+                                            <a class="dropdown-item @active("Admin")" asp-controller="Admin" asp-action="Index">
+                                                👥 Management Utilizatori
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <hr class="dropdown-divider">
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item @active("Audit")" asp-controller="Audit" asp-action="Index">
+                                                📋 Audit Logs
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </li>
+                            }
                         </ul>
 
                         <div class="d-flex align-items-center ms-auto gap-2">
@@ -61,6 +88,13 @@
                                     title="Schimbă tema">
                                 🌙
                             </button>
+
+                            <a asp-controller="Account"
+                               asp-action="ChangePassword"
+                               class="btn btn-sm btn-outline-primary"
+                               title="Schimbă parola">
+                                🔐 Reset Parolă
+                            </a>
 
                             <p class="nav navbar-text mb-0 me-1">
                                 Hello, <b>@loginEmail</b>!

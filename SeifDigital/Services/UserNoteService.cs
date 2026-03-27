@@ -7,10 +7,12 @@ namespace SeifDigital.Services
     public class UserNoteService
     {
         private readonly ApplicationDbContext _db;
+        private readonly EncryptionService _encryption;
 
-        public UserNoteService(ApplicationDbContext db)
+        public UserNoteService(ApplicationDbContext db, EncryptionService encryption)
         {
             _db = db;
+            _encryption = encryption;
         }
 
         public async Task<(List<UserNote> Items, int TotalCount)> SearchForOwnerKeyAsync(
@@ -33,7 +35,8 @@ namespace SeifDigital.Services
             if (!string.IsNullOrWhiteSpace(q))
             {
                 q = q.Trim();
-                query = query.Where(x => x.Title.Contains(q) || x.Text.Contains(q));
+                // Căutare doar pe titlu
+                query = query.Where(x => x.Title.Contains(q));
             }
 
             var total = await query.CountAsync();
@@ -43,6 +46,12 @@ namespace SeifDigital.Services
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
+
+            // ✅ DECRIPTEZ textul pentru fiecare item (handle both encrypted and plain text)
+            foreach (var item in items)
+            {
+                item.Text = SafeDecrypt(item.Text);
+            }
 
             return (items, total);
         }
@@ -62,12 +71,15 @@ namespace SeifDigital.Services
             text = NormalizeText(text);
             if (string.IsNullOrWhiteSpace(text)) return;
 
+            // ✅ CRIPTEZ TEXTUL înainte de salvare
+            var encryptedText = _encryption.Encrypt(text);
+
             var note = new UserNote
             {
                 OwnerKey = ownerKey,
                 OwnerUser = ownerUser ?? "",
                 Title = title,
-                Text = text,
+                Text = encryptedText, // ✅ Salvez textul criptat în NoteText (prin mapping)
                 CreatedUtc = DateTime.UtcNow,
                 UpdatedUtc = DateTime.UtcNow
             };
@@ -80,9 +92,16 @@ namespace SeifDigital.Services
         {
             if (string.IsNullOrWhiteSpace(ownerKey)) return null;
 
-            return await _db.UserNotes
+            var note = await _db.UserNotes
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == id && x.OwnerKey == ownerKey);
+
+            if (note == null) return null;
+
+            // ✅ DECRIPTEZ textul după citire din DB (handle both encrypted and plain text)
+            note.Text = SafeDecrypt(note.Text);
+
+            return note;
         }
 
         public async Task<bool> UpdateAsync(long id, string ownerKey, string title, string text)
@@ -95,7 +114,10 @@ namespace SeifDigital.Services
             if (note == null) return false;
 
             note.Title = NormalizeTitle(title);
-            note.Text = NormalizeText(text);
+
+            // ✅ CRIPTEZ noul text înainte de salvare
+            text = NormalizeText(text);
+            note.Text = _encryption.Encrypt(text); // ✅ Criptez și salvez direct în Text (mapped to NoteText)
             note.UpdatedUtc = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
@@ -141,6 +163,33 @@ namespace SeifDigital.Services
 
             var t = text.Length > 80 ? text.Substring(0, 80) : text;
             return NormalizeTitle(t);
+        }
+
+        /// <summary>
+        /// Safely decrypts text, handling both encrypted and plain text data.
+        /// If decryption fails (e.g., plain text), returns the original text.
+        /// This supports migration from unencrypted to encrypted notes.
+        /// </summary>
+        private string SafeDecrypt(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return text;
+
+            try
+            {
+                return _encryption.Decrypt(text);
+            }
+            catch (FormatException)
+            {
+                // Text is not valid Base64 (likely plain text from old data)
+                // Return as-is - it's already in plain text
+                return text;
+            }
+            catch (Exception)
+            {
+                // Any other decryption error - return original text
+                return text;
+            }
         }
     }
 }
