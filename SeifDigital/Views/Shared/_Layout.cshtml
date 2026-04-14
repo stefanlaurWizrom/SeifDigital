@@ -54,7 +54,7 @@
                             @if (isAdmin)
                             {
                                 <li class="nav-item dropdown">
-                                    <a class="nav-link dropdown-toggle @(currentController == "admin" || currentController == "audit" ? "active fw-semibold" : "")" 
+                                    <a class="nav-link dropdown-toggle @(currentController == "admin" || currentController == "audit" || currentController == "filemanagement" ? "active fw-semibold" : "")" 
                                        href="#" 
                                        id="adminDropdown" 
                                        role="button" 
@@ -66,6 +66,11 @@
                                         <li>
                                             <a class="dropdown-item @active("Admin")" asp-controller="Admin" asp-action="Index">
                                                 👥 Management Utilizatori
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item @active("FileManagement")" asp-controller="FileManagement" asp-action="Index">
+                                                📁 Management Fisiere
                                             </a>
                                         </li>
                                         <li>

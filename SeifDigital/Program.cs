@@ -11,6 +11,19 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
 
+// ✅ NOU: Mărire limită upload fișiere (default ~28.6 MB)
+// Setare pentru Kestrel server
+builder.WebHost.ConfigureKestrel(serverOptions =>
+{
+    serverOptions.Limits.MaxRequestBodySize = 100_000_000; // 100 MB
+});
+
+// Setare pentru IIS (dacă se folosește)
+builder.Services.Configure<IISServerOptions>(options =>
+{
+    options.MaxRequestBodySize = 100_000_000; // 100 MB
+});
+
 // Session
 builder.Services.AddSession(options =>
 {

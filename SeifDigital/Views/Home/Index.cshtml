@@ -328,7 +328,7 @@
                                 ⬆️ Incarcă
                             </button>
                         </div>
-                        <small class="text-muted">
+                        <small class="text-muted" id="fileCategoriesText">
                             📸 Imagini (JPG, PNG, GIF, WEBP) - Max 5MB | 
                             📄 Documente (TXT, DOC, DOCX, PDF, XLSX) - Max 10MB | 
                             🔐 Certificate (CER, PFX, PEM, CRT, KEY) - Max 2MB
@@ -346,6 +346,44 @@
 
 @section Scripts {
     <script>
+        // 🔄 VARIABILĂ GLOBALĂ: Hartă dinamică extensie → categorie
+        let extensionToCategoryMap = {};
+
+        // 🔄 ÎNCARCĂ CATEGORIILE PERMISE DIN MANAGEMENT FISIERE
+        (async function loadFileCategoriesOnPageLoad() {
+            try {
+                // 1. Citește HTML-ul pentru afișare
+                const htmlResponse = await fetch("/Home/GetFileCategoriesHtml");
+                const htmlData = await htmlResponse.json();
+                if (htmlData.html) {
+                    document.getElementById("fileCategoriesText").textContent = htmlData.html;
+                }
+
+                // 2. ✅ NOU: Citește structura JSON pentru logică frontend
+                const jsonResponse = await fetch("/Home/GetFileCategoriesJson");
+                const jsonData = await jsonResponse.json();
+
+                if (jsonData.categories && Array.isArray(jsonData.categories)) {
+                    // Construiește hartă: extensie → categorie
+                    extensionToCategoryMap = {};
+                    jsonData.categories.forEach(cat => {
+                        if (cat.extensions && Array.isArray(cat.extensions)) {
+                            cat.extensions.forEach(ext => {
+                                extensionToCategoryMap[ext] = cat.name;
+                            });
+                        }
+                    });
+
+                    console.log("✅ [FileCategories] Extension map loaded:", extensionToCategoryMap);
+                } else {
+                    console.warn("⚠️ [FileCategories] No categories received from server");
+                }
+            } catch (error) {
+                console.error("❌ Error loading file categories:", error);
+                // Fall back la defaults, deja afișate în HTML
+            }
+        })();
+
         // ===== B5.1: peek + hold-to-reveal în câmpul de introducere =====
         (function setupPasswordInputUX() {
             const input = document.getElementById("inputParola");
@@ -743,21 +781,18 @@
             previewContainer.innerHTML = "";
 
             if (file) {
-                // Detectează fileType pe baza extensiei
-                const ext = file.name.toLowerCase().split('.').pop();
-                let fileType = "image"; // default
+                // ✅ STRICT: Extrage extensia și caută DOAR în hartă dinamică
+                const ext = ("." + file.name.toLowerCase().split('.').pop()).toLowerCase();
 
-                // Detectează categoria pe baza extensiei
-                if ([".jpg", ".jpeg", ".png", ".gif", ".webp"].includes("." + ext)) {
-                    fileType = "image";
-                } else if ([".txt", ".doc", ".docx", ".pdf", ".xlsx", ".xls"].includes("." + ext)) {
-                    fileType = "document";
-                } else if ([".cer", ".pfx", ".pem", ".crt", ".key"].includes("." + ext)) {
-                    fileType = "certificate";
-                }
+                // ✅ DINAMIC: Citește din hartă globală (populată din server)
+                // ⚠️ IMPORTANT: Dacă extensia nu e în hartă, fileType rămâne undefined
+                // Backend-ul va respinge cu mesaj specific: "nu se regaseste in lista celor permise"
+                let fileType = extensionToCategoryMap[ext];
 
-                // Setează fileType hidden input
-                document.getElementById("fileType").value = fileType;
+                console.log(`📁 File: ${file.name}, Extension: ${ext}, Detected Category: ${fileType || "UNKNOWN"}`);
+
+                // ✅ FIX: Setează fileType hidden input - dacă e undefined, trimite string gol
+                document.getElementById("fileType").value = fileType || "";
 
                 // Preview pentru imagini
                 if (fileType === "image") {
@@ -773,14 +808,25 @@
                     };
 
                     reader.readAsDataURL(file);
-                } else {
-                    // Pentru alte tipuri, afișează info despre fișier
+                } else if (fileType) {
+                    // Pentru alte tipuri cunoscute, afișează info despre fișier
                     const info = document.createElement("div");
                     info.className = "alert alert-info";
                     info.innerHTML = `
                         <strong>📄 ${fileType.toUpperCase()}</strong><br>
                         Fișier: ${file.name}<br>
                         Mărime: ${(file.size / 1024).toFixed(2)} KB
+                    `;
+                    previewContainer.appendChild(info);
+                } else {
+                    // Fișier cu extensie necunoscută - nu afișa preview, doar mesaj
+                    const info = document.createElement("div");
+                    info.className = "alert alert-warning";
+                    info.innerHTML = `
+                        <strong>⚠️ Tip necunoscut</strong><br>
+                        Fișier: ${file.name}<br>
+                        Extensie: ${ext}<br>
+                        <small>Această extensie nu se regasește în lista categoriilor permise.</small>
                     `;
                     previewContainer.appendChild(info);
                 }
@@ -791,7 +837,6 @@
         document.getElementById("btnUploadFile")?.addEventListener("click", async function() {
             const file = document.getElementById("imageFileInput")?.files[0];
             const id = document.getElementById("imageUploadId").value;
-            const fileType = document.getElementById("fileType").value;
 
             if (!file) {
                 alert("Te rog selectează un fișier înainte de a incarca.");
@@ -803,11 +848,15 @@
                 return;
             }
 
+            // ✅ EXTRACT EXTENSION (nu categoria!)
+            const fileName = file.name.toLowerCase();
+            const extension = "." + fileName.split('.').pop();
+
             // Crează FormData
             const formData = new FormData();
             formData.append("id", id);
             formData.append("imageFile", file);
-            formData.append("fileType", fileType);
+            formData.append("fileExtension", extension);  // ✅ Trimite EXTENSION, nu fileType
 
             // Preluatoken CSRF
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
@@ -821,8 +870,16 @@
                     body: formData
                 });
 
-                if (response.ok) {
-                    alert(`✅ Fișier ${fileType} incărcat cu succes!`);
+                if (!response.ok) {
+                    alert(`❌ Eroare server: ${response.status}`);
+                    return;
+                }
+
+                // ✅ Parsează JSON response
+                const result = await response.json();
+
+                if (result.ok) {
+                    alert(result.message);
                     // Curăță file input
                     document.getElementById("imageFileInput").value = "";
                     // ✅ INCHIDE modalul complet și curață backdrop-ul
@@ -835,9 +892,11 @@
                     // Refă body-ul la starea normală
                     document.body.classList.remove('modal-open');
                     document.body.style.overflow = '';
+                    // ✅ Reîncarcă pagina pentru a vedea fișierul nou
+                    location.reload();
                 } else {
-                    const text = await response.text();
-                    alert(`❌ Eroare: ${text || "Upload eșuat"}`);
+                    // ✅ Afișează mesajul de eroare EXACT cum vine de la backend
+                    alert(result.message || "❌ Upload eșuat din motiv necunoscut");
                 }
             } catch (err) {
                 console.error(err);

@@ -18,17 +18,20 @@ namespace SeifDigital.Controllers
         private readonly AuditService _audit;
         private readonly EncryptionService _crypto;
         private readonly UserFileService _userFileService;  // ✅ NOU
+        private readonly SettingsService _settings;  // ✅ NOU
 
         public HomeController(
             ApplicationDbContext context, 
             EncryptionService crypto, 
             AuditService audit,
-            UserFileService userFileService)  // ✅ NOU
+            UserFileService userFileService,  // ✅ NOU
+            SettingsService settings)  // ✅ NOU
         {
             _context = context;
             _crypto = crypto;
             _audit = audit;
             _userFileService = userFileService;  // ✅ NOU
+            _settings = settings;  // ✅ NOU
         }
 
         // Pagina principală (căutare + paginare 25/pg)
@@ -617,10 +620,16 @@ namespace SeifDigital.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UploadImage(int id, IFormFile? imageFile, string fileType = "image")
+        public async Task<IActionResult> UploadImage(int id, IFormFile? imageFile, string? fileExtension)
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
-                return RedirectToAction("Login", "Account");
+                return Json(new { ok = false, message = "❌ Sesiune expirat. Te rog reîncarcă pagina." });
+
+            // ✅ VALIDATION: fileExtension must NOT be null/empty
+            if (string.IsNullOrWhiteSpace(fileExtension))
+            {
+                return Json(new { ok = false, message = "❌ Nu pot determina extensia fișierului." });
+            }
 
             string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
 
@@ -628,21 +637,15 @@ namespace SeifDigital.Controllers
                 .FirstOrDefault(x => x.Id == id && x.OwnerKey == ownerKey);
 
             if (item == null)
-            {
-                TempData["Error"] = "❌ Înregistrarea nu există sau nu ai acces.";
-                return RedirectToAction("Index");
-            }
+                return Json(new { ok = false, message = "❌ Înregistrarea nu există sau nu ai acces." });
 
             if (imageFile == null || imageFile.Length == 0)
-            {
-                TempData["Error"] = "❌ Te rog selectează un fișier.";
-                return RedirectToAction("Index");
-            }
+                return Json(new { ok = false, message = "❌ Te rog selectează un fișier." });
 
             try
             {
-                // Validare strictă cu mesaj descriptiv
-                var userFile = await _userFileService.UploadFileAsync(imageFile, ownerKey, fileType);
+                // ✅ Trimite EXTENSION la service, NU categoria
+                var userFile = await _userFileService.UploadFileAsync(imageFile, ownerKey, fileExtension);
 
                 if (userFile != null)
                 {
@@ -651,7 +654,7 @@ namespace SeifDigital.Controllers
                     {
                         InformatieSensibila_Id = id,
                         UserFile_Id = userFile.Id,
-                        FileType = fileType,
+                        FileType = userFile.FileCategory,  // ✅ Use category from userFile
                         CreatedUtc = DateTime.UtcNow
                     };
 
@@ -659,19 +662,43 @@ namespace SeifDigital.Controllers
                     item.LastUpdatedUtc = DateTime.UtcNow;
                     await _context.SaveChangesAsync();
 
-                    TempData["Success"] = $"✅ Fișier {fileType} încărcat cu succes!";
+                    _audit.Log(HttpContext,
+                        eventType: "File.Upload",
+                        outcome: "Success",
+                        targetType: "UserFile",
+                        targetId: userFile.Id.ToString(),
+                        details: new { fileName = imageFile.FileName, fileExtension, category = userFile.FileCategory, fileSize = imageFile.Length });
+
+                    return Json(new { ok = true, message = $"✅ Fișier încărcat cu succes!", fileId = userFile.Id });
                 }
+
+                return Json(new { ok = false, message = "❌ Eroare: Fișierul nu a putut fi salvat." });
             }
             catch (InvalidOperationException ex)
             {
-                TempData["Error"] = ex.Message; // Mesaj specific de validare
+                // Mesaj specific de validare (din UserFileService)
+                _audit.Log(HttpContext,
+                    eventType: "File.Upload",
+                    outcome: "Fail",
+                    reason: "ValidationError",
+                    targetType: "UserFile",
+                    targetId: id.ToString(),
+                    details: new { fileName = imageFile?.FileName, fileExtension, error = ex.Message });
+
+                return Json(new { ok = false, message = ex.Message });
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"❌ Eroare la încărcarea fișierului: {ex.Message}";
-            }
+                _audit.Log(HttpContext,
+                    eventType: "File.Upload",
+                    outcome: "Fail",
+                    reason: "UnexpectedException",
+                    targetType: "UserFile",
+                    targetId: id.ToString(),
+                    details: new { fileName = imageFile?.FileName, fileExtension, error = ex.Message });
 
-            return RedirectToAction("Index");
+                return Json(new { ok = false, message = $"❌ Eroare la încărcarea fișierului: {ex.Message}" });
+            }
         }
 
         [HttpPost]
@@ -809,6 +836,106 @@ namespace SeifDigital.Controllers
                 .ToListAsync();
 
             return Json(new { success = true, images = imagini });
+        }
+
+        // 🔄 API Endpoint: Generează textul cu categoriile permise pentru fișiere
+        [HttpGet]
+        public async Task<IActionResult> GetFileCategoriesHtml()
+        {
+            try
+            {
+                var categories = await _settings.GetFileCategoriesAsync();
+                if (categories == null || categories.Count == 0)
+                {
+                    return Json(new { html = "" });
+                }
+
+                // Construiește HTML cu fiecare categorie
+                var sb = new System.Text.StringBuilder();
+                foreach (var cat in categories.Values)
+                {
+                    if (cat.TryGetValue("label", out var labelObj) &&
+                        cat.TryGetValue("extensions", out var extObj) &&
+                        cat.TryGetValue("maxSizeMB", out var maxObj))
+                    {
+                        var label = labelObj?.ToString() ?? "";
+                        var extensions = extObj?.ToString() ?? "";
+                        var maxSizeMB = Convert.ToInt32(maxObj);
+
+                        // Format: 📸 Imagini (JPG, PNG, GIF, WEBP) - Max 5MB
+                        var extList = extensions.Split(';', System.StringSplitOptions.RemoveEmptyEntries)
+                            .Select(e => e.Trim().ToUpper().TrimStart('.'))
+                            .ToList();
+                        var extStr = string.Join(", ", extList);
+
+                        // Emoji selector
+                        var emoji = cat.TryGetValue("name", out var nameObj) ? nameObj?.ToString() switch
+                        {
+                            "image" => "📸",
+                            "document" => "📄",
+                            "certificate" => "🔐",
+                            _ => "📁"
+                        } : "📁";
+
+                        sb.Append($"{emoji} {label} ({extStr}) - Max {maxSizeMB}MB | ");
+                    }
+                }
+
+                // Șterge " | " final
+                string html = sb.ToString().TrimEnd(' ', '|').Trim();
+
+                return Json(new { html = html });
+            }
+            catch
+            {
+                return Json(new { html = "" });
+            }
+        }
+
+        /// <summary>
+        /// ✅ NOU: Returnează structura categoriilor pentru frontend (JSON)
+        /// Folosit de JavaScript pentru a determina fileType dinamic
+        /// </summary>
+        public async Task<IActionResult> GetFileCategoriesJson()
+        {
+            try
+            {
+                var categories = await _settings.GetFileCategoriesAsync();
+                if (categories == null || categories.Count == 0)
+                {
+                    return Json(new { categories = new List<object>() });
+                }
+
+                var result = new List<dynamic>();
+
+                foreach (var cat in categories.Values)
+                {
+                    if (cat.TryGetValue("name", out var nameObj) &&
+                        cat.TryGetValue("extensions", out var extObj))
+                    {
+                        var name = nameObj?.ToString();
+                        var extensionsStr = extObj?.ToString() ?? "";
+
+                        // Parse extensions: ".jpg;.jpeg;.png" -> [".jpg", ".jpeg", ".png"]
+                        var extensions = extensionsStr
+                            .Split(';', System.StringSplitOptions.RemoveEmptyEntries)
+                            .Select(e => e.Trim().ToLower())
+                            .ToList();
+
+                        result.Add(new
+                        {
+                            name = name,
+                            extensions = extensions
+                        });
+                    }
+                }
+
+                return Json(new { categories = result });
+            }
+            catch
+            {
+                return Json(new { categories = new List<object>() });
+            }
         }
 
     }

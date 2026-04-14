@@ -1,0 +1,284 @@
+@{
+    ViewData["Title"] = "Management Fisiere";
+}
+
+<div class="container mt-4">
+    <h1>📁 Management Fisiere</h1>
+    <p class="text-muted">Configurează extensiile permise și limitele de dimensiune pentru fiecare categorie de fișier</p>
+
+    <!-- Categorii existente -->
+    <div class="row mt-4">
+        <div id="categoriesContainer"></div>
+    </div>
+
+    <!-- Buton adaugare categorie nouă -->
+    <div class="mt-4">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+            ➕ Adaugă Categorie Nouă
+        </button>
+    </div>
+</div>
+
+<!-- Modal pentru adaugare categorie -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">➕ Adaugă Categorie Nouă</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label"><strong>Nume Categorie:</strong></label>
+                    <input type="text" class="form-control" id="newCategoryName" placeholder="Ex: audio, video" maxlength="50">
+                    <small class="text-muted">Doar lowercase, numere și underscore</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label"><strong>Etichetă (label):</strong></label>
+                    <input type="text" class="form-control" id="newCategoryLabel" placeholder="Ex: Fișiere Audio" maxlength="100">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label"><strong>Extensii Permise:</strong></label>
+                    <input type="text" class="form-control" id="newCategoryExtensions" placeholder=".mp3;.wav;.flac">
+                    <small class="text-muted">Separate prin ; (ex: .mp3;.wav;.flac)</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label"><strong>Dimensiune Maximă (MB):</strong></label>
+                    <input type="number" class="form-control" id="newCategoryMaxSize" placeholder="50" min="1" max="1000" value="10">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulează</button>
+                <button type="button" class="btn btn-primary" onclick="addCategory()">✓ Adaugă</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pentru editare categorie -->
+<div class="modal fade" id="editCategoryModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">✏️ Editează Categorie</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editCategoryName">
+                <div class="mb-3">
+                    <label class="form-label"><strong>Categoria:</strong></label>
+                    <input type="text" class="form-control" id="editCategoryNameDisplay" disabled>
+                    <small class="text-muted">Nu se poate schimba numele categoriei</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label"><strong>Etichetă (label):</strong></label>
+                    <input type="text" class="form-control" id="editCategoryLabel" placeholder="Ex: Fișiere Audio" maxlength="100">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label"><strong>Extensii Permise:</strong></label>
+                    <input type="text" class="form-control" id="editCategoryExtensions" placeholder=".mp3;.wav;.flac">
+                    <small class="text-muted">Separate prin ; (ex: .mp3;.wav;.flac)</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label"><strong>Dimensiune Maximă (MB):</strong></label>
+                    <input type="number" class="form-control" id="editCategoryMaxSize" placeholder="50" min="1" max="1000" value="10">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulează</button>
+                <button type="button" class="btn btn-primary" onclick="updateCategory()">✓ Salvează</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Categorii din ViewBag (serializate direct în view)
+    let allCategories = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.Categories ?? new List<Dictionary<string, object>>()));
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadCategories();
+    });
+
+    function loadCategories() {
+        if (allCategories && allCategories.length > 0) {
+            displayCategories(allCategories);
+        } else {
+            displayDefaultCategories();
+        }
+    }
+
+    function displayDefaultCategories() {
+        const defaultCategories = [
+            { name: 'image', label: 'Imagini', extensions: '.jpg;.jpeg;.png;.gif;.webp', maxSizeMB: 5 },
+            { name: 'document', label: 'Documente', extensions: '.txt;.doc;.docx;.pdf;.xlsx;.xls', maxSizeMB: 10 },
+            { name: 'certificate', label: 'Certificate', extensions: '.cer;.pfx;.pem;.crt;.key', maxSizeMB: 2 }
+        ];
+        displayCategories(defaultCategories);
+    }
+
+    function displayCategories(categories) {
+        const container = document.getElementById('categoriesContainer');
+        container.innerHTML = '';
+
+        if (!categories || categories.length === 0) {
+            container.innerHTML = '<div class="col-12"><div class="alert alert-info">Nu există categorii configurate</div></div>';
+            return;
+        }
+
+        categories.forEach(cat => {
+            const extensions = cat.extensions ? cat.extensions.split(';').map(e => e.trim()).join(', ') : '';
+            const isDefault = cat.name === 'image' || cat.name === 'document' || cat.name === 'certificate';
+
+            const html = `
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-header ${isDefault ? 'bg-info text-white' : 'bg-secondary text-white'}">
+                            <strong>${cat.label || cat.name}</strong>
+                            ${isDefault ? '<span class="badge bg-warning text-dark ms-2">Default</span>' : ''}
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <small class="text-muted"><strong>Categoria:</strong> ${cat.name}</small>
+                            </div>
+                            <div class="mb-2">
+                                <small><strong>Extensii Permise:</strong></small>
+                                <div class="mt-1" style="word-break: break-word;">${extensions}</div>
+                            </div>
+                            <div class="mb-3">
+                                <small><strong>Dimensiune Maximă:</strong></small>
+                                <div class="mt-1"><strong>${cat.maxSizeMB} MB</strong></div>
+                            </div>
+                        </div>
+                        <div class="card-footer d-flex gap-2">
+                            <button class="btn btn-sm btn-primary flex-grow-1" onclick="editCategory('${cat.name}')">
+                                ✏️ Editează
+                            </button>
+                            ${!isDefault ? `<button class="btn btn-sm btn-danger" onclick="deleteCategory('${cat.name}')">🗑️ Șterge</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.innerHTML += html;
+        });
+    }
+
+    function editCategory(categoryName) {
+        // Găsește categoria în array
+        const category = allCategories.find(cat => cat.name === categoryName);
+        if (!category) {
+            alert('Categoria nu a fost găsită!');
+            return;
+        }
+
+        // Completează form-ul cu datele curente
+        document.getElementById('editCategoryName').value = category.name;
+        document.getElementById('editCategoryNameDisplay').value = category.label + ' (' + category.name + ')';
+        document.getElementById('editCategoryLabel').value = category.label || '';
+        document.getElementById('editCategoryExtensions').value = category.extensions || '';
+        document.getElementById('editCategoryMaxSize').value = category.maxSizeMB || 10;
+
+        // Deschide modalul
+        const modal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
+        modal.show();
+    }
+
+    function updateCategory() {
+        const name = document.getElementById('editCategoryName').value.trim();
+        const label = document.getElementById('editCategoryLabel').value.trim();
+        const extensions = document.getElementById('editCategoryExtensions').value.trim();
+        const maxSizeMB = parseInt(document.getElementById('editCategoryMaxSize').value) || 10;
+
+        if (!name || !label || !extensions) {
+            alert('Toate câmpurile sunt obligatorii!');
+            return;
+        }
+
+        fetch('/FileManagement/UpdateCategory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, label, extensions, maxSizeMB })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✓ ' + data.message);
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editCategoryModal'));
+                if (modal) modal.hide();
+                location.reload();
+            } else {
+                alert('✗ ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Eroare:', error);
+            alert('Eroare la actualizarea categoriei!');
+        });
+    }
+
+    function deleteCategory(categoryName) {
+        if (!confirm('Sigur vrei să ștergi categoria "' + categoryName + '"?')) return;
+
+        fetch('/FileManagement/DeleteCategory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: categoryName })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✓ ' + data.message);
+                location.reload();
+            } else {
+                alert('✗ ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Eroare:', error);
+            alert('Eroare la ștergerea categoriei!');
+        });
+    }
+
+    function addCategory() {
+        const name = document.getElementById('newCategoryName').value.trim().toLowerCase();
+        const label = document.getElementById('newCategoryLabel').value.trim();
+        const extensions = document.getElementById('newCategoryExtensions').value.trim();
+        const maxSizeMB = parseInt(document.getElementById('newCategoryMaxSize').value) || 10;
+
+        if (!name || !label || !extensions) {
+            alert('Toate câmpurile sunt obligatorii!');
+            return;
+        }
+
+        if (!/^[a-z0-9_]+$/.test(name)) {
+            alert('Numele categoriei trebuie să conțină doar lowercase, numere și underscore!');
+            return;
+        }
+
+        fetch('/FileManagement/AddCategory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, label, extensions, maxSizeMB })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✓ ' + data.message);
+                document.getElementById('newCategoryName').value = '';
+                document.getElementById('newCategoryLabel').value = '';
+                document.getElementById('newCategoryExtensions').value = '';
+                document.getElementById('newCategoryMaxSize').value = '10';
+                const modal = bootstrap.Modal.getInstance(document.getElementById('addCategoryModal'));
+                if (modal) modal.hide();
+                location.reload();
+            } else {
+                alert('✗ ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Eroare:', error);
+            alert('Eroare la adăugarea categoriei!');
+        });
+    }
+</script>
