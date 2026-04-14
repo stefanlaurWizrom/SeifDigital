@@ -104,6 +104,12 @@
                             </a>
 
                             <button type="button"
+                                    class="btn btn-sm btn-outline-warning mt-2 w-100"
+                                    onclick="openImageModal(@n.Id)">
+                                📁 Fisiere
+                            </button>
+
+                            <button type="button"
                                     class="btn btn-sm btn-outline-primary mt-2 w-100"
                                     onclick="openSendNoteModal(@n.Id)">
                                 Trimite
@@ -191,8 +197,250 @@
     </div>
 </div>
 
+<!-- ✅ NOU: Modal pentru gestionarea fișierelor notei -->
+<div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Fișiere Nota</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @Html.AntiForgeryToken()
+
+                <!-- Upload zone -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">📤 Încarcă fișier</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="dropZone" class="border-2 border-dashed rounded p-4 text-center" style="cursor: pointer; border-color: #dee2e6;">
+                            <div style="font-size: 48px; margin-bottom: 12px;">📁</div>
+                            <p class="mb-1"><strong>Trage fișierul aici</strong> sau <u>click pentru a selecta</u></p>
+                            <small class="text-muted" id="categoriesText">Se încarcă categorii permise...</small>
+                            <input type="file" id="fileInput" style="display:none;" />
+                        </div>
+
+                        <div id="uploadProgress" class="mt-3" style="display:none;">
+                            <div class="progress">
+                                <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted">Se încarcă...</small>
+                        </div>
+
+                        <div id="uploadResult" class="mt-2"></div>
+                    </div>
+                </div>
+
+                <!-- Lista fișiere atasate -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">📋 Fișiere atasate</h6>
+                    </div>
+                    <div class="card-body" id="filesList" style="max-height: 400px; overflow-y: auto;">
+                        <p class="text-muted text-center">Se încarcă...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Închide</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
+        let currentNoteId = null;
+        let allCategories = [];
+
+        // ✅ Funcție pentru deschidere modal
+        function openImageModal(noteId) {
+            currentNoteId = noteId;
+
+            // Încarcă categoriile permise
+            fetch('/Notes/GetFileCategoriesHtml')
+                .then(r => r.json())
+                .then(data => {
+                    const categoriesEl = document.getElementById('categoriesText');
+                    if (data.html) {
+                        categoriesEl.innerHTML = data.html;
+                    }
+                });
+
+            // Încarcă lista fișierelor notei
+            loadNoteImages();
+
+            const modalEl = document.getElementById('imageModal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        // ✅ Funcție pentru încărcarea listei fișierelor
+        function loadNoteImages() {
+            fetch(`/Notes/GetNoteImages?id=${currentNoteId}`)
+                .then(r => r.json())
+                .then(data => {
+                    const filesList = document.getElementById('filesList');
+                    if (data.success && data.images && data.images.length > 0) {
+                        let html = '<div class="list-group">';
+                        data.images.forEach(img => {
+                            const iconMap = {
+                                'image': '📸',
+                                'document': '📄',
+                                'certificate': '🔐'
+                            };
+                            const icon = iconMap[img.fileType] || '📁';
+
+                            html += `
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div><strong>${icon} ${img.fileName}</strong></div>
+                                        <small class="text-muted">${(img.sizeBytes / 1024).toFixed(2)} KB • ${img.extension}</small>
+                                    </div>
+                                    <div class="btn-group" role="group">
+                                        <a href="/Notes/DownloadImage?fileId=${img.id}" class="btn btn-sm btn-outline-primary" title="Descarcă">
+                                            ⬇️
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteNoteFile(${currentNoteId}, ${img.id})">
+                                            🗑️
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        html += '</div>';
+                        filesList.innerHTML = html;
+                    } else {
+                        filesList.innerHTML = '<p class="text-muted text-center">Nu ai fișiere atasate.</p>';
+                    }
+                });
+        }
+
+        // ✅ Funcție pentru ștergere fișier
+        function deleteNoteFile(noteId, fileId) {
+            if (!confirm('Sigur vrei să ștergi fișierul?')) return;
+
+            fetch(`/Notes/DeleteImage?noteId=${noteId}&fileId=${fileId}`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('input[name="__RequestVerificationToken"]').value
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    loadNoteImages();
+                } else {
+                    alert('Eroare: ' + data.message);
+                }
+            })
+            .catch(err => alert('Eroare la ștergere: ' + err));
+        }
+
+        // ✅ Drag & Drop + Upload
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const progressBar = document.getElementById('progressBar');
+        const uploadResult = document.getElementById('uploadResult');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.style.borderColor = '#0d6efd';
+                dropZone.style.backgroundColor = '#f8f9ff';
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.style.borderColor = '#dee2e6';
+                dropZone.style.backgroundColor = 'transparent';
+            });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            fileInput.files = files;
+            handleFiles(files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+
+            const file = files[0];
+            const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+
+            // Determină categoria din extensie
+            fetch('/Notes/GetFileCategoriesJson')
+                .then(r => r.json())
+                .then(data => {
+                    allCategories = data.categories;
+                    let fileType = 'image';
+
+                    for (let cat of allCategories) {
+                        if (cat.extensions.includes(ext)) {
+                            fileType = cat.name;
+                            break;
+                        }
+                    }
+
+                    uploadFile(file, fileType);
+                });
+        }
+
+        function uploadFile(file, fileType) {
+            const formData = new FormData();
+            formData.append('id', currentNoteId);
+            formData.append('imageFile', file);
+            formData.append('fileExtension', file.name.substring(file.name.lastIndexOf('.')));
+
+            uploadProgress.style.display = 'block';
+            progressBar.style.width = '0%';
+
+            fetch('/Notes/UploadImage', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('input[name="__RequestVerificationToken"]').value
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                uploadProgress.style.display = 'none';
+                uploadResult.innerHTML = `<div class="alert alert-${data.ok ? 'success' : 'danger'}">${data.message}</div>`;
+
+                if (data.ok) {
+                    fileInput.value = '';
+                    setTimeout(() => {
+                        loadNoteImages();
+                        uploadResult.innerHTML = '';
+                    }, 1500);
+                }
+            })
+            .catch(err => {
+                uploadProgress.style.display = 'none';
+                uploadResult.innerHTML = `<div class="alert alert-danger">Eroare: ${err}</div>`;
+            });
+        }
+
         function openSendNoteModal(id) {
             const hiddenId = document.getElementById("sendNoteId");
             const emailInput = document.getElementById("sendNoteRecipientEmail");

@@ -12,6 +12,7 @@ namespace SeifDigital.Data
         public DbSet<AppSetting> AppSettings { get; set; }
 
         public DbSet<UserNote> UserNotes { get; set; }
+        public DbSet<NoteFisier> NoteFisieri { get; set; }  // ✅ NOU: Fișiere pentru Note
         public DbSet<UserFile> UserFiles { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<InformatieImagine> InformatiiImagini { get; set; } // ✅ Keep for backward compatibility
@@ -119,6 +120,40 @@ namespace SeifDigital.Data
                 e.Property(x => x.UpdatedUtc).HasColumnType("datetime2(3)").IsRequired();
 
                 e.HasIndex(x => x.OwnerKey);
+
+                // ✅ NOU: Many-to-Many relație cu fișiere (NoteFisier)
+                e.HasMany(x => x.Fisieri)
+                    .WithOne(x => x.UserNote)
+                    .HasForeignKey(x => x.UserNote_Id)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // =========================
+            // NoteFisier (dbo.NoteFisier) - Junction table for Notes + Files
+            // =========================
+            modelBuilder.Entity<NoteFisier>(e =>
+            {
+                e.ToTable("NoteFisier", "dbo");
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.FileType).HasMaxLength(50).IsRequired();
+                e.Property(x => x.CreatedUtc).HasColumnType("datetime2(3)");
+
+                // Foreign keys
+                e.HasOne(x => x.UserNote)
+                    .WithMany(x => x.Fisieri)
+                    .HasForeignKey(x => x.UserNote_Id)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                e.HasOne(x => x.UserFile)
+                    .WithMany()
+                    .HasForeignKey(x => x.UserFile_Id)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Indexes
+                e.HasIndex(x => x.UserNote_Id);
+                e.HasIndex(x => x.UserFile_Id);
+                e.HasIndex(x => new { x.UserNote_Id, x.UserFile_Id }).IsUnique(false);
             });
 
             // =========================

@@ -245,6 +245,57 @@ namespace SeifDigital.Controllers
                 };
 
                 _db.UserNotes.Add(note);
+
+                // ✅ NOU: Copiază fișierele dacă mesajul conține atasamente
+                if (!string.IsNullOrWhiteSpace(msg.AttachedImageFileIds))
+                {
+                    try
+                    {
+                        // Salvează nota mai întâi pentru a avea ID
+                        await _db.SaveChangesAsync();
+
+                        // Deserializează array de {fileId, fileType} folosind JsonDocument
+                        using (var doc = System.Text.Json.JsonDocument.Parse(msg.AttachedImageFileIds))
+                        {
+                            var root = doc.RootElement;
+                            if (root.ValueKind == System.Text.Json.JsonValueKind.Array)
+                            {
+                                foreach (var element in root.EnumerateArray())
+                                {
+                                    try
+                                    {
+                                        // Extrage fileId și fileType
+                                        long fileId = element.GetProperty("fileId").GetInt64();
+                                        string fileType = element.GetProperty("fileType").GetString() ?? "image";
+
+                                        var copiedFile = await _userFileService.CopyImageForUserAsync(fileId, ownerKey);
+                                        if (copiedFile != null)
+                                        {
+                                            // ✅ NOU: Crează NoteFisier cu FileType
+                                            var noteFisier = new SeifDigital.Models.NoteFisier
+                                            {
+                                                UserNote_Id = note.Id,
+                                                UserFile_Id = copiedFile.Id,
+                                                FileType = fileType,
+                                                CreatedUtc = DateTime.UtcNow
+                                            };
+                                            _db.NoteFisieri.Add(noteFisier);
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Continuă cu următorul fișier dacă ceva merge prost
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Ignoră erori în copierea fișierelor, dar salvează nota
+                    }
+                }
             }
 
             // marchează mesajul ca salvat

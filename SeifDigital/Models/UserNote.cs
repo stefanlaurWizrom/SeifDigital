@@ -26,5 +26,8 @@ namespace SeifDigital.Models
 
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
+
+        // ✅ NOU: Many-to-Many relație cu fișiere
+        public ICollection<NoteFisier> Fisieri { get; set; } = new List<NoteFisier>();
     }
 }

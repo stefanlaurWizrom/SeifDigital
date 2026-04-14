@@ -44,6 +44,51 @@
                                     <div class="mesaje-note-title">@((string.IsNullOrWhiteSpace(m.Text) ? "Fără titlu" : m.Text))</div>
                                     <div class="mt-1" style="white-space:pre-wrap">@m.NoteText</div>
                                 </div>
+
+                                <!-- ✅ NOU: Afișare fișiere atasate la Note -->
+                                @if (!string.IsNullOrWhiteSpace(m.AttachedImageFileIds))
+                                {
+                                    <div class="mt-3 border-top pt-2">
+                                        <small class="text-muted d-block mb-2">📁 Fișiere atasate (apasă "Salvează" pentru a le accesa):</small>
+                                        <div class="row g-2">
+                                            @{
+                                                var attachedFilesNote = System.Text.Json.JsonSerializer.Deserialize<List<dynamic>>(m.AttachedImageFileIds);
+                                                if (attachedFilesNote != null && attachedFilesNote.Count > 0)
+                                                {
+                                                    @foreach (var file in attachedFilesNote)
+                                                    {
+                                                        try
+                                                        {
+                                                            // Extrage fileId și fileType din dynamic
+                                                            long fileId = ((System.Text.Json.JsonElement)file.GetType().GetProperty("fileId")?.GetValue(file)!).GetInt64();
+                                                            string fileType = ((System.Text.Json.JsonElement)file.GetType().GetProperty("fileType")?.GetValue(file)!).GetString() ?? "image";
+
+                                                            var icon = fileType switch 
+                                                            {
+                                                                "image" => "📸",
+                                                                "document" => "📄",
+                                                                "certificate" => "🔐",
+                                                                _ => "📎"
+                                                            };
+
+                                                            <div class="col-md-3">
+                                                                <div class="border rounded p-2">
+                                                                    <div class="bg-light rounded text-center py-3">
+                                                                        <div style="font-size: 32px; margin-bottom: 8px;">@Html.Raw(icon)</div>
+                                                                        <small class="text-muted">@fileType.ToUpper()</small>
+                                                                    </div>
+                                                                    <small class="text-muted d-block mt-2">Fișierul @(attachedFilesNote.IndexOf(file) + 1)/@attachedFilesNote.Count</small>
+                                                                    <small class="text-muted d-block">Se va copia la salvare</small>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                        catch { }
+                                                    }
+                                                }
+                                            }
+                                        </div>
+                                    </div>
+                                }
                             }
                             else
                             {
