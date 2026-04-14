@@ -304,7 +304,7 @@ namespace SeifDigital.Controllers
         public async Task<IActionResult> DeleteImage(long noteId, long fileId)
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
-                return Forbid();
+                return Json(new { success = false, message = "❌ Sesiune expirat. Te rog reîncarcă pagina." });
 
             var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
 
@@ -312,7 +312,7 @@ namespace SeifDigital.Controllers
                 .FirstOrDefault(x => x.Id == noteId && x.OwnerKey == ownerKey);
 
             if (note == null)
-                return NotFound();
+                return Json(new { success = false, message = "❌ Nota nu există sau nu ai acces." });
 
             // ✅ Găsește și șterge relația
             var noteFisier = await _db.NoteFisieri
@@ -332,21 +332,22 @@ namespace SeifDigital.Controllers
 
                     if (result)
                     {
-                        return Ok(new { success = true, message = "✅ Fișier șters cu succes!" });
+                        return Json(new { success = true, message = "✅ Fișier șters cu succes!" });
                     }
                     else
                     {
                         // Fișierul fizic nu s-a șters, dar relația a fost ștearsă - e OK
-                        return Ok(new { success = true, message = "✅ Fișier șters din notă!" });
+                        return Json(new { success = true, message = "✅ Fișier șters din notă!" });
                     }
                 }
                 catch (Exception ex)
                 {
-                    return BadRequest(new { success = false, message = $"❌ Eroare: {ex.Message}" });
+                    _audit.Log(HttpContext, "File.Delete", "Error", targetId: $"{noteId}_{fileId}", reason: ex.Message);
+                    return Json(new { success = false, message = $"❌ Eroare: {ex.Message}" });
                 }
             }
 
-            return NotFound();
+            return Json(new { success = false, message = "❌ Fișierul nu a fost găsit." });
         }
 
         // ✅ NOU: DESCARCĂ fișier de la o notă
@@ -354,7 +355,7 @@ namespace SeifDigital.Controllers
         public async Task<IActionResult> DownloadImage(long fileId)
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
-                return Forbid();
+                return Unauthorized();
 
             var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
 
@@ -375,7 +376,7 @@ namespace SeifDigital.Controllers
         public async Task<IActionResult> GetImagePreview(long fileId)
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
-                return Forbid();
+                return Unauthorized();
 
             var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
 
@@ -410,7 +411,7 @@ namespace SeifDigital.Controllers
         public async Task<IActionResult> GetNoteImages(long id)
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
-                return Forbid();
+                return Json(new { success = false, message = "❌ Sesiune expirat.", images = new List<object>() });
 
             var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
 
@@ -418,26 +419,34 @@ namespace SeifDigital.Controllers
                 .FirstOrDefault(x => x.Id == id && x.OwnerKey == ownerKey);
 
             if (note == null)
-                return NotFound();
+                return Json(new { success = false, message = "❌ Nota nu există.", images = new List<object>() });
 
-            // ✅ Citește din NoteFisieri
-            var imagini = await _db.NoteFisieri
-                .Where(x => x.UserNote_Id == id)
-                .Include(x => x.UserFile)
-                .OrderByDescending(x => x.CreatedUtc)
-                .Select(x => new
-                {
-                    id = x.UserFile!.Id,
-                    fileName = x.UserFile.OriginalFileName,
-                    extension = x.UserFile.Extension,
-                    sizeBytes = x.UserFile.SizeBytes,
-                    uploadedUtc = x.UserFile.UploadedUtc,
-                    fileType = x.FileType,
-                    previewUrl = $"/Notes/GetImagePreview?fileId={x.UserFile.Id}"
-                })
-                .ToListAsync();
+            try
+            {
+                // ✅ Citește din NoteFisieri
+                var imagini = await _db.NoteFisieri
+                    .Where(x => x.UserNote_Id == id)
+                    .Include(x => x.UserFile)
+                    .OrderByDescending(x => x.CreatedUtc)
+                    .Select(x => new
+                    {
+                        id = x.UserFile!.Id,
+                        fileName = x.UserFile.OriginalFileName,
+                        extension = x.UserFile.Extension,
+                        sizeBytes = x.UserFile.SizeBytes,
+                        uploadedUtc = x.UserFile.UploadedUtc,
+                        fileType = x.FileType,
+                        previewUrl = $"/Notes/GetImagePreview?fileId={x.UserFile.Id}"
+                    })
+                    .ToListAsync();
 
-            return Json(new { success = true, images = imagini });
+                return Json(new { success = true, images = imagini });
+            }
+            catch (Exception ex)
+            {
+                _audit.Log(HttpContext, "GetNoteImages", "Error", targetId: id.ToString(), reason: ex.Message);
+                return Json(new { success = false, message = $"❌ Eroare: {ex.Message}", images = new List<object>() });
+            }
         }
 
         // ✅ NOU: API Endpoint - Categorii permise pentru upload
@@ -449,7 +458,7 @@ namespace SeifDigital.Controllers
                 var categories = await _settings.GetFileCategoriesAsync();
                 if (categories == null || categories.Count == 0)
                 {
-                    return Json(new { html = "" });
+                    return Json(new { html = "📸 Imagini (JPG, PNG, GIF, WEBP) - Max 5MB | 📄 Documente (TXT, DOC, DOCX, PDF, XLSX) - Max 10MB | 🔐 Certificate (CER, PFX, PEM, CRT, KEY) - Max 2MB" });
                 }
 
                 // Construiește HTML cu fiecare categorie
@@ -485,12 +494,17 @@ namespace SeifDigital.Controllers
 
                 // Șterge " | " final
                 string html = sb.ToString().TrimEnd(' ', '|').Trim();
+                if (string.IsNullOrWhiteSpace(html))
+                {
+                    html = "📸 Imagini (JPG, PNG, GIF, WEBP) - Max 5MB | 📄 Documente (TXT, DOC, DOCX, PDF, XLSX) - Max 10MB | 🔐 Certificate (CER, PFX, PEM, CRT, KEY) - Max 2MB";
+                }
 
                 return Json(new { html = html });
             }
-            catch
+            catch (Exception ex)
             {
-                return Json(new { html = "" });
+                _audit.Log(HttpContext, "GetFileCategoriesHtml", "Error", reason: ex.Message);
+                return Json(new { html = "📸 Imagini (JPG, PNG, GIF, WEBP) - Max 5MB | 📄 Documente (TXT, DOC, DOCX, PDF, XLSX) - Max 10MB | 🔐 Certificate (CER, PFX, PEM, CRT, KEY) - Max 2MB" });
             }
         }
 
@@ -504,12 +518,17 @@ namespace SeifDigital.Controllers
             try
             {
                 var categories = await _settings.GetFileCategoriesAsync();
+
+                var result = new List<object>();
+
+                // Fallback defaults dacă nu găsim categorii
                 if (categories == null || categories.Count == 0)
                 {
-                    return Json(new { categories = new List<object>() });
+                    result.Add(new { name = "image", extensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" } });
+                    result.Add(new { name = "document", extensions = new[] { ".txt", ".doc", ".docx", ".pdf", ".xlsx", ".xls" } });
+                    result.Add(new { name = "certificate", extensions = new[] { ".cer", ".pfx", ".pem", ".crt", ".key" } });
+                    return Json(new { categories = result });
                 }
-
-                var result = new List<dynamic>();
 
                 foreach (var cat in categories.Values)
                 {
@@ -533,11 +552,28 @@ namespace SeifDigital.Controllers
                     }
                 }
 
+                // Dacă nu s-a adăugat nimic, returnează defaults
+                if (result.Count == 0)
+                {
+                    result.Add(new { name = "image", extensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" } });
+                    result.Add(new { name = "document", extensions = new[] { ".txt", ".doc", ".docx", ".pdf", ".xlsx", ".xls" } });
+                    result.Add(new { name = "certificate", extensions = new[] { ".cer", ".pfx", ".pem", ".crt", ".key" } });
+                }
+
                 return Json(new { categories = result });
             }
-            catch
+            catch (Exception ex)
             {
-                return Json(new { categories = new List<object>() });
+                _audit.Log(HttpContext, "GetFileCategoriesJson", "Error", reason: ex.Message);
+
+                // Return fallback defaults on any error
+                var fallback = new List<object>
+                {
+                    new { name = "image", extensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" } },
+                    new { name = "document", extensions = new[] { ".txt", ".doc", ".docx", ".pdf", ".xlsx", ".xls" } },
+                    new { name = "certificate", extensions = new[] { ".cer", ".pfx", ".pem", ".crt", ".key" } }
+                };
+                return Json(new { categories = fallback });
             }
         }
     }

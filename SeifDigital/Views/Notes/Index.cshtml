@@ -197,53 +197,52 @@
     </div>
 </div>
 
-<!-- ✅ NOU: Modal pentru gestionarea fișierelor notei -->
+<!-- ✅ Modal pentru fișiere Note - IDENTIC CU PAROLE -->
 <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" id="imageUploadId" value="" />
+            <input type="hidden" name="fileType" id="fileType" value="image" />
+
             <div class="modal-header">
-                <h5 class="modal-title">Fișiere Nota</h5>
+                <h5 class="modal-title">📁 Fișiere pentru notă</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
+
             <div class="modal-body">
-                @Html.AntiForgeryToken()
-
-                <!-- Upload zone -->
-                <div class="card mb-3">
-                    <div class="card-header">
-                        <h6 class="mb-0">📤 Încarcă fișier</h6>
-                    </div>
-                    <div class="card-body">
-                        <div id="dropZone" class="border-2 border-dashed rounded p-4 text-center" style="cursor: pointer; border-color: #dee2e6;">
-                            <div style="font-size: 48px; margin-bottom: 12px;">📁</div>
-                            <p class="mb-1"><strong>Trage fișierul aici</strong> sau <u>click pentru a selecta</u></p>
-                            <small class="text-muted" id="categoriesText">Se încarcă categorii permise...</small>
-                            <input type="file" id="fileInput" style="display:none;" />
-                        </div>
-
-                        <div id="uploadProgress" class="mt-3" style="display:none;">
-                            <div class="progress">
-                                <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
-                            </div>
-                            <small class="text-muted">Se încarcă...</small>
-                        </div>
-
-                        <div id="uploadResult" class="mt-2"></div>
-                    </div>
+                <!-- Fișiere existente -->
+                <div id="imagePreviewContainer" class="mb-4">
+                    <!-- Se populează din JS -->
                 </div>
 
-                <!-- Lista fișiere atasate -->
+                <!-- Upload fișier - CU BUTON SEPARAT -->
                 <div class="card">
-                    <div class="card-header">
-                        <h6 class="mb-0">📋 Fișiere atasate</h6>
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0">📤 Adauga fișiere noi</h6>
                     </div>
-                    <div class="card-body" id="filesList" style="max-height: 400px; overflow-y: auto;">
-                        <p class="text-muted text-center">Se încarcă...</p>
+                    <div class="card-body">
+                        <label for="imageFileInput" class="form-label">Selectează fișier</label>
+                        <div class="input-group mb-2">
+                            <input type="file" 
+                                   id="imageFileInput" 
+                                   accept=".jpg,.jpeg,.png,.gif,.webp,.txt,.doc,.docx,.pdf,.xlsx,.xls,.cer,.pfx,.pem,.crt,.key" 
+                                   class="form-control" />
+                            <button type="button" class="btn btn-outline-primary" id="btnUploadFile">
+                                ⬆️ Incarcă
+                            </button>
+                        </div>
+                        <small class="text-muted" id="fileCategoriesText">
+                            📸 Imagini (JPG, PNG, GIF, WEBP) - Max 5MB | 
+                            📄 Documente (TXT, DOC, DOCX, PDF, XLSX) - Max 10MB | 
+                            🔐 Certificate (CER, PFX, PEM, CRT, KEY) - Max 2MB
+                        </small>
                     </div>
                 </div>
             </div>
+
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Închide</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Inchide</button>
             </div>
         </div>
     </div>
@@ -251,195 +250,295 @@
 
 @section Scripts {
     <script>
+        // 🔄 VARIABILĂ GLOBALĂ: Hartă dinamică extensie → categorie (EXACT CA PAROLE)
+        let extensionToCategoryMap = {};
         let currentNoteId = null;
-        let allCategories = [];
 
-        // ✅ Funcție pentru deschidere modal
+        // ✅ ÎNCARCĂ CATEGORIILE PE PAGE LOAD (similar Parole)
+        (async function loadFileCategoriesOnPageLoad() {
+            try {
+                // 1. Citește HTML-ul pentru afișare
+                const htmlResponse = await fetch("/Notes/GetFileCategoriesHtml");
+                if (!htmlResponse.ok) {
+                    console.warn("⚠️ GetFileCategoriesHtml returned:", htmlResponse.status);
+                    return;
+                }
+
+                const htmlData = await htmlResponse.json();
+                if (htmlData && htmlData.html) {
+                    // Nu actualizez HTML pe load, doar la deschiderea modal-ului
+                }
+
+                // 2. ✅ Citește structura JSON pentru logică frontend
+                const jsonResponse = await fetch("/Notes/GetFileCategoriesJson");
+                if (!jsonResponse.ok) {
+                    console.warn("⚠️ GetFileCategoriesJson returned:", jsonResponse.status);
+                    return;
+                }
+
+                const jsonData = await jsonResponse.json();
+
+                if (jsonData.categories && Array.isArray(jsonData.categories)) {
+                    // Construiește hartă: extensie → categorie (EXACT CA PAROLE)
+                    extensionToCategoryMap = {};
+                    jsonData.categories.forEach(cat => {
+                        if (cat.extensions && Array.isArray(cat.extensions)) {
+                            cat.extensions.forEach(ext => {
+                                extensionToCategoryMap[ext] = cat.name;
+                            });
+                        }
+                    });
+
+                    console.log("✅ [FileCategories] Extension map loaded:", extensionToCategoryMap);
+                } else {
+                    console.warn("⚠️ [FileCategories] No categories in response");
+                }
+            } catch (error) {
+                console.error("❌ Error loading file categories on page load:", error);
+            }
+        })();
+
+        // ✅ DESCHIDERE MODAL - EXACT CA PAROLE
         function openImageModal(noteId) {
             currentNoteId = noteId;
+            document.getElementById('imageUploadId').value = noteId;
 
-            // Încarcă categoriile permise
-            fetch('/Notes/GetFileCategoriesHtml')
-                .then(r => r.json())
+            const container = document.getElementById('imagePreviewContainer');
+            container.innerHTML = '<p class="text-muted">Se încarcă fișierele...</p>';
+
+            // Preia fișierele pentru această notă
+            fetch(`/Notes/GetNoteImages?id=${noteId}`)
+                .then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.json();
+                })
                 .then(data => {
-                    const categoriesEl = document.getElementById('categoriesText');
-                    if (data.html) {
-                        categoriesEl.innerHTML = data.html;
-                    }
-                });
+                    container.innerHTML = '';
 
-            // Încarcă lista fișierelor notei
-            loadNoteImages();
+                    if (!data.success || !data.images || data.images.length === 0) {
+                        container.innerHTML = '<p class="text-muted">Nicio fișier ataşat</p>';
+                    } else {
+                        // Crează galerie similar cu Parole
+                        const iconMap = {
+                            'image': '📸',
+                            'document': '📄',
+                            'certificate': '🔐'
+                        };
 
-            const modalEl = document.getElementById('imageModal');
-            const modal = new bootstrap.Modal(modalEl);
-            modal.show();
-        }
+                        let html = `<div class="card mb-4">
+                            <div class="card-header bg-info bg-opacity-10">
+                                <h6 class="mb-0">${iconMap[data.images[0].fileType] || '📁'} Fișiere atasate (${data.images.length})</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="list-group">`;
 
-        // ✅ Funcție pentru încărcarea listei fișierelor
-        function loadNoteImages() {
-            fetch(`/Notes/GetNoteImages?id=${currentNoteId}`)
-                .then(r => r.json())
-                .then(data => {
-                    const filesList = document.getElementById('filesList');
-                    if (data.success && data.images && data.images.length > 0) {
-                        let html = '<div class="list-group">';
                         data.images.forEach(img => {
-                            const iconMap = {
-                                'image': '📸',
-                                'document': '📄',
-                                'certificate': '🔐'
-                            };
                             const icon = iconMap[img.fileType] || '📁';
-
                             html += `
                                 <div class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>
+                                    <div class="flex-grow-1">
                                         <div><strong>${icon} ${img.fileName}</strong></div>
-                                        <small class="text-muted">${(img.sizeBytes / 1024).toFixed(2)} KB • ${img.extension}</small>
+                                        <small class="text-muted">${(img.sizeBytes / 1024).toFixed(0)} KB</small>
                                     </div>
-                                    <div class="btn-group" role="group">
-                                        <a href="/Notes/DownloadImage?fileId=${img.id}" class="btn btn-sm btn-outline-primary" title="Descarcă">
-                                            ⬇️
-                                        </a>
-                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteNoteFile(${currentNoteId}, ${img.id})">
-                                            🗑️
-                                        </button>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <a href="/Notes/DownloadImage?fileId=${img.id}" class="btn btn-outline-primary" download>⬇️</a>
+                                        <button type="button" class="btn btn-outline-danger" onclick="deleteImage(${noteId}, ${img.id})">🗑️</button>
                                     </div>
                                 </div>
                             `;
                         });
-                        html += '</div>';
-                        filesList.innerHTML = html;
-                    } else {
-                        filesList.innerHTML = '<p class="text-muted text-center">Nu ai fișiere atasate.</p>';
+
+                        html += '</div></div></div>';
+                        container.innerHTML = html;
                     }
+                })
+                .catch(err => {
+                    console.error("❌ Error loading files:", err);
+                    container.innerHTML = '<p class="text-danger">Eroare la încărcarea fișierelor</p>';
                 });
-        }
 
-        // ✅ Funcție pentru ștergere fișier
-        function deleteNoteFile(noteId, fileId) {
-            if (!confirm('Sigur vrei să ștergi fișierul?')) return;
-
-            fetch(`/Notes/DeleteImage?noteId=${noteId}&fileId=${fileId}`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': document.querySelector('input[name="__RequestVerificationToken"]').value
-                }
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    loadNoteImages();
-                } else {
-                    alert('Eroare: ' + data.message);
-                }
-            })
-            .catch(err => alert('Eroare la ștergere: ' + err));
-        }
-
-        // ✅ Drag & Drop + Upload
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        const uploadProgress = document.getElementById('uploadProgress');
-        const progressBar = document.getElementById('progressBar');
-        const uploadResult = document.getElementById('uploadResult');
-
-        dropZone.addEventListener('click', () => fileInput.click());
-
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, preventDefaults);
-        });
-
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => {
-                dropZone.style.borderColor = '#0d6efd';
-                dropZone.style.backgroundColor = '#f8f9ff';
-            });
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => {
-                dropZone.style.borderColor = '#dee2e6';
-                dropZone.style.backgroundColor = 'transparent';
-            });
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            fileInput.files = files;
-            handleFiles(files);
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            handleFiles(e.target.files);
-        });
-
-        function handleFiles(files) {
-            if (files.length === 0) return;
-
-            const file = files[0];
-            const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-
-            // Determină categoria din extensie
-            fetch('/Notes/GetFileCategoriesJson')
+            // Încarcă categoriile text pentru afișare
+            fetch("/Notes/GetFileCategoriesHtml")
                 .then(r => r.json())
                 .then(data => {
-                    allCategories = data.categories;
-                    let fileType = 'image';
-
-                    for (let cat of allCategories) {
-                        if (cat.extensions.includes(ext)) {
-                            fileType = cat.name;
-                            break;
-                        }
+                    if (data && data.html) {
+                        document.getElementById("fileCategoriesText").innerHTML = data.html;
                     }
+                })
+                .catch(err => console.warn("⚠️ Could not load categories HTML"));
 
-                    uploadFile(file, fileType);
+            const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+            modal.show();
+        }
+
+        // ✅ ȘTERGE FIȘIER - EXACT CA PAROLE
+        async function deleteImage(noteId, fileId) {
+            if (!confirm('Sigur vrei să ștergi acest fișier?')) return;
+
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            const token = tokenInput ? tokenInput.value : '';
+
+            try {
+                const response = await fetch('/Notes/DeleteImage', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                    },
+                    body: `noteId=${encodeURIComponent(noteId)}&fileId=${encodeURIComponent(fileId)}&__RequestVerificationToken=${encodeURIComponent(token)}`
                 });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        alert('✅ Fișier șters cu succes!');
+                        // ✅ INCHIDE modalul complet și curață backdrop-ul (EXACT CA PAROLE)
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('imageModal'));
+                        if (modal) {
+                            modal.hide();
+                        }
+                        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                        document.body.classList.remove('modal-open');
+                        document.body.style.overflow = '';
+                        // Reîncarcă pagina
+                        location.reload();
+                    } else {
+                        alert('❌ ' + (result.message || 'Eroare la ștergerea fișierului'));
+                    }
+                } else {
+                    alert('❌ Eroare server la ștergere.');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('❌ Eroare de rețea.');
+            }
         }
 
-        function uploadFile(file, fileType) {
+        // ✅ DETECTARE FILETYPE SAU PREVIEW - EXACT CA PAROLE
+        document.getElementById("imageFileInput")?.addEventListener("change", function() {
+            const file = this.files[0];
+            const previewContainer = document.getElementById("imagePreviewContainer");
+
+            previewContainer.innerHTML = "";
+
+            if (file) {
+                // ✅ STRICT: Extrage extensia
+                const ext = ("." + file.name.toLowerCase().split('.').pop()).toLowerCase();
+
+                // ✅ DINAMIC: Citește din hartă globală
+                let fileType = extensionToCategoryMap[ext];
+
+                console.log(`📁 File: ${file.name}, Extension: ${ext}, Detected Category: ${fileType || "UNKNOWN"}`);
+
+                // ✅ Setează hidden fileType
+                document.getElementById("fileType").value = fileType || "";
+
+                // Preview pentru imagini
+                if (fileType === "image") {
+                    const reader = new FileReader();
+
+                    reader.onload = function(e) {
+                        const img = document.createElement("img");
+                        img.src = e.target.result;
+                        img.classList.add("img-fluid");
+                        img.style.maxHeight = "400px";
+                        img.style.objectFit = "contain";
+                        previewContainer.appendChild(img);
+                    };
+
+                    reader.readAsDataURL(file);
+                } else if (fileType) {
+                    // Pentru alte tipuri cunoscute, afișează info
+                    const info = document.createElement("div");
+                    info.className = "alert alert-info";
+                    info.innerHTML = `
+                        <strong>📄 ${fileType.toUpperCase()}</strong><br>
+                        Fișier: ${file.name}<br>
+                        Mărime: ${(file.size / 1024).toFixed(2)} KB
+                    `;
+                    previewContainer.appendChild(info);
+                } else {
+                    // Fișier necunoscut
+                    const info = document.createElement("div");
+                    info.className = "alert alert-warning";
+                    info.innerHTML = `
+                        <strong>⚠️ Tip necunoscut</strong><br>
+                        Fișier: ${file.name}<br>
+                        Extensie: ${ext}<br>
+                        <small>Această extensie nu se regasește în lista categoriilor permise.</small>
+                    `;
+                    previewContainer.appendChild(info);
+                }
+            }
+        });
+
+        // ✅ UPLOAD VIA AJAX - EXACT CA PAROLE (fără validare form)
+        document.getElementById("btnUploadFile")?.addEventListener("click", async function() {
+            const file = document.getElementById("imageFileInput")?.files[0];
+            const id = document.getElementById("imageUploadId").value;
+
+            if (!file) {
+                alert("Te rog selectează un fișier înainte de a încarca.");
+                return;
+            }
+
+            if (!id) {
+                alert("ID notă lipsă.");
+                return;
+            }
+
+            // ✅ EXTRACT EXTENSION (nu categoria!) - EXACT CA PAROLE
+            const fileName = file.name.toLowerCase();
+            const extension = "." + fileName.split('.').pop();
+
+            // Crează FormData
             const formData = new FormData();
-            formData.append('id', currentNoteId);
-            formData.append('imageFile', file);
-            formData.append('fileExtension', file.name.substring(file.name.lastIndexOf('.')));
+            formData.append("id", id);
+            formData.append("imageFile", file);
+            formData.append("fileExtension", extension);  // ✅ Trimite EXTENSION, NU fileType
 
-            uploadProgress.style.display = 'block';
-            progressBar.style.width = '0%';
+            // Preluă token CSRF
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            if (tokenInput) {
+                formData.append("__RequestVerificationToken", tokenInput.value);
+            }
 
-            fetch('/Notes/UploadImage', {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-CSRF-TOKEN': document.querySelector('input[name="__RequestVerificationToken"]').value
+            try {
+                const response = await fetch("/Notes/UploadImage", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    alert(`❌ Eroare server: ${response.status}`);
+                    return;
                 }
-            })
-            .then(r => r.json())
-            .then(data => {
-                uploadProgress.style.display = 'none';
-                uploadResult.innerHTML = `<div class="alert alert-${data.ok ? 'success' : 'danger'}">${data.message}</div>`;
 
-                if (data.ok) {
-                    fileInput.value = '';
-                    setTimeout(() => {
-                        loadNoteImages();
-                        uploadResult.innerHTML = '';
-                    }, 1500);
+                // ✅ Parsează JSON response
+                const result = await response.json();
+
+                if (result.ok) {
+                    alert(result.message);
+                    // Curăță file input
+                    document.getElementById("imageFileInput").value = "";
+                    // ✅ INCHIDE modalul complet și curață backdrop-ul (EXACT CA PAROLE)
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('imageModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    // ✅ Reîncarcă pagina pentru a vedea fișierul nou (EXACT CA PAROLE)
+                    location.reload();
+                } else {
+                    // ✅ Afișează mesajul de eroare EXACT cum vine de la backend
+                    alert(result.message || "❌ Upload eșuat din motiv necunoscut");
                 }
-            })
-            .catch(err => {
-                uploadProgress.style.display = 'none';
-                uploadResult.innerHTML = `<div class="alert alert-danger">Eroare: ${err}</div>`;
-            });
-        }
+            } catch (err) {
+                console.error(err);
+                alert("❌ Eroare de rețea la upload.");
+            }
+        });
 
         function openSendNoteModal(id) {
             const hiddenId = document.getElementById("sendNoteId");
