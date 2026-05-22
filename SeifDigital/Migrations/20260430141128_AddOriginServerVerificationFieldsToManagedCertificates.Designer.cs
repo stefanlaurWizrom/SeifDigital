@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SeifDigital.Data;
 
@@ -11,9 +12,11 @@ using SeifDigital.Data;
 namespace SeifDigital.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260430141128_AddOriginServerVerificationFieldsToManagedCertificates")]
+    partial class AddOriginServerVerificationFieldsToManagedCertificates
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -104,60 +107,6 @@ namespace SeifDigital.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("AuditLog", "dbo");
-                });
-
-            modelBuilder.Entity("SeifDigital.Models.CertificateAlertLog", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("AlertSentDateUtc")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2(3)")
-                        .HasDefaultValueSql("GETUTCDATE()");
-
-                    b.Property<string>("AlertType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("CertificateUrl")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("nvarchar(2048)");
-
-                    b.Property<int>("DaysUntilExpiry")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EmailSentTo")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<string>("EmailStatus")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("Pending");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)");
-
-                    b.Property<int>("ManagedCertificateId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AlertSentDateUtc");
-
-                    b.HasIndex("ManagedCertificateId");
-
-                    b.ToTable("CertificateAlertLog", "dbo");
                 });
 
             modelBuilder.Entity("SeifDigital.Models.InformatieFisier", b =>
@@ -624,17 +573,6 @@ namespace SeifDigital.Migrations
                         .IsUnique();
 
                     b.ToTable("UserProfile", "dbo");
-                });
-
-            modelBuilder.Entity("SeifDigital.Models.CertificateAlertLog", b =>
-                {
-                    b.HasOne("SeifDigital.Models.ManagedCertificate", "ManagedCertificate")
-                        .WithMany()
-                        .HasForeignKey("ManagedCertificateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ManagedCertificate");
                 });
 
             modelBuilder.Entity("SeifDigital.Models.InformatieFisier", b =>

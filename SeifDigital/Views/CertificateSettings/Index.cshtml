@@ -1,0 +1,255 @@
+@model SeifDigital.Services.CertificateSettingsViewModel
+
+@{
+    ViewData["Title"] = "Setari Certificat";
+}
+
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>⚙️ Setari Alerta Certificate SSL/TLS</h2>
+            <p class="text-muted">Configureaza parametrii pentru verificarea automata si alertarea certificatelor</p>
+        </div>
+    </div>
+
+    <!-- Success/Error Messages -->
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <strong>✅ Succes!</strong> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>❌ Eroare!</strong> @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Settings Form -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">⚙️ Parametri Verificare</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="@Url.Action("SaveSettings")" id="settingsForm">
+                        @Html.AntiForgeryToken()
+
+                        <!-- Verification Hour & Minute -->
+                        <div class="row mb-4">
+                            <label class="col-md-4 col-form-label">
+                                <strong>Ora Verificare</strong>
+                            </label>
+                            <div class="col-md-8">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <div class="input-group">
+                                            <input type="number" 
+                                                   class="form-control" 
+                                                   name="VerificationHour" 
+                                                   id="verificationHour"
+                                                   value="@Model.VerificationHour"
+                                                   min="0" 
+                                                   max="23"
+                                                   placeholder="HH"
+                                                   required>
+                                            <span class="input-group-text">:</span>
+                                            <input type="number" 
+                                                   class="form-control" 
+                                                   name="VerificationMinute" 
+                                                   id="verificationMinute"
+                                                   value="@Model.VerificationMinute"
+                                                   min="0" 
+                                                   max="59"
+                                                   placeholder="MM"
+                                                   required>
+                                        </div>
+                                        <small class="text-muted d-block mt-2">
+                                            Format 24h (HH: 0-23, MM: 0-59, ex: 14:30)
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Timezone -->
+                        <div class="row mb-4">
+                            <label class="col-md-4 col-form-label">
+                                <strong>Zona Orara</strong>
+                            </label>
+                            <div class="col-md-8">
+                                <select class="form-control" name="Timezone" id="timezoneSelect" required>
+                                    <option value="">-- Selecteaza zona orara --</option>
+                                    <optgroup label="Europa Occidentala">
+                                        @Html.Raw(Model.Timezone == "Europe/London" ? "<option value=\"Europe/London\" selected>🇬🇧 Londra (Europe/London)</option>" : "<option value=\"Europe/London\">🇬🇧 Londra (Europe/London)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Dublin" ? "<option value=\"Europe/Dublin\" selected>🇮🇪 Dublin (Europe/Dublin)</option>" : "<option value=\"Europe/Dublin\">🇮🇪 Dublin (Europe/Dublin)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Lisbon" ? "<option value=\"Europe/Lisbon\" selected>🇵🇹 Lisabona (Europe/Lisbon)</option>" : "<option value=\"Europe/Lisbon\">🇵🇹 Lisabona (Europe/Lisbon)</option>")
+                                    </optgroup>
+                                    <optgroup label="Europa Centrala">
+                                        @Html.Raw(Model.Timezone == "Europe/Paris" ? "<option value=\"Europe/Paris\" selected>🇫🇷 Paris (Europe/Paris)</option>" : "<option value=\"Europe/Paris\">🇫🇷 Paris (Europe/Paris)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Berlin" ? "<option value=\"Europe/Berlin\" selected>🇩🇪 Berlin (Europe/Berlin)</option>" : "<option value=\"Europe/Berlin\">🇩🇪 Berlin (Europe/Berlin)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Brussels" ? "<option value=\"Europe/Brussels\" selected>🇧🇪 Bruxelles (Europe/Brussels)</option>" : "<option value=\"Europe/Brussels\">🇧🇪 Bruxelles (Europe/Brussels)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Amsterdam" ? "<option value=\"Europe/Amsterdam\" selected>🇳🇱 Amsterdam (Europe/Amsterdam)</option>" : "<option value=\"Europe/Amsterdam\">🇳🇱 Amsterdam (Europe/Amsterdam)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Vienna" ? "<option value=\"Europe/Vienna\" selected>🇦🇹 Viena (Europe/Vienna)</option>" : "<option value=\"Europe/Vienna\">🇦🇹 Viena (Europe/Vienna)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Prague" ? "<option value=\"Europe/Prague\" selected>🇨🇿 Praga (Europe/Prague)</option>" : "<option value=\"Europe/Prague\">🇨🇿 Praga (Europe/Prague)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Warsaw" ? "<option value=\"Europe/Warsaw\" selected>🇵🇱 Varsovia (Europe/Warsaw)</option>" : "<option value=\"Europe/Warsaw\">🇵🇱 Varsovia (Europe/Warsaw)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Budapest" ? "<option value=\"Europe/Budapest\" selected>🇭🇺 Budapesta (Europe/Budapest)</option>" : "<option value=\"Europe/Budapest\">🇭🇺 Budapesta (Europe/Budapest)</option>")
+                                    </optgroup>
+                                    <optgroup label="Europa de Est">
+                                        @Html.Raw(Model.Timezone == "Europe/Bucharest" ? "<option value=\"Europe/Bucharest\" selected>🇷🇴 Bucuresti (Europe/Bucharest) - DEFAULT</option>" : "<option value=\"Europe/Bucharest\">🇷🇴 Bucuresti (Europe/Bucharest) - DEFAULT</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Sofia" ? "<option value=\"Europe/Sofia\" selected>🇧🇬 Sofia (Europe/Sofia)</option>" : "<option value=\"Europe/Sofia\">🇧🇬 Sofia (Europe/Sofia)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Athens" ? "<option value=\"Europe/Athens\" selected>🇬🇷 Atena (Europe/Athens)</option>" : "<option value=\"Europe/Athens\">🇬🇷 Atena (Europe/Athens)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Helsinki" ? "<option value=\"Europe/Helsinki\" selected>🇫🇮 Helsinki (Europe/Helsinki)</option>" : "<option value=\"Europe/Helsinki\">🇫🇮 Helsinki (Europe/Helsinki)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Riga" ? "<option value=\"Europe/Riga\" selected>🇱🇻 Riga (Europe/Riga)</option>" : "<option value=\"Europe/Riga\">🇱🇻 Riga (Europe/Riga)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Vilnius" ? "<option value=\"Europe/Vilnius\" selected>🇱🇹 Vilnius (Europe/Vilnius)</option>" : "<option value=\"Europe/Vilnius\">🇱🇹 Vilnius (Europe/Vilnius)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Moscow" ? "<option value=\"Europe/Moscow\" selected>🇷🇺 Moscova (Europe/Moscow)</option>" : "<option value=\"Europe/Moscow\">🇷🇺 Moscova (Europe/Moscow)</option>")
+                                    </optgroup>
+                                    <optgroup label="Europa de Sud">
+                                        @Html.Raw(Model.Timezone == "Europe/Madrid" ? "<option value=\"Europe/Madrid\" selected>🇪🇸 Madrid (Europe/Madrid)</option>" : "<option value=\"Europe/Madrid\">🇪🇸 Madrid (Europe/Madrid)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Rome" ? "<option value=\"Europe/Rome\" selected>🇮🇹 Roma (Europe/Rome)</option>" : "<option value=\"Europe/Rome\">🇮🇹 Roma (Europe/Rome)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Belgrade" ? "<option value=\"Europe/Belgrade\" selected>🇷🇸 Belgrad (Europe/Belgrade)</option>" : "<option value=\"Europe/Belgrade\">🇷🇸 Belgrad (Europe/Belgrade)</option>")
+                                        @Html.Raw(Model.Timezone == "Europe/Istanbul" ? "<option value=\"Europe/Istanbul\" selected>🇹🇷 Istanbul (Europe/Istanbul)</option>" : "<option value=\"Europe/Istanbul\">🇹🇷 Istanbul (Europe/Istanbul)</option>")
+                                    </optgroup>
+                                </select>
+                                <small class="text-muted d-block mt-2">
+                                    Selecteaza zona orara pentru calculul orei de verificare
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Alert Days Threshold -->
+                        <div class="row mb-4">
+                            <label class="col-md-4 col-form-label">
+                                <strong>Prag Alerta (Zile)</strong>
+                            </label>
+                            <div class="col-md-8">
+                                <input type="number" 
+                                       class="form-control" 
+                                       name="AlertDaysThreshold" 
+                                       value="@Model.AlertDaysThreshold"
+                                       min="1"
+                                       required>
+                                <small class="text-muted d-block mt-2">
+                                    Trimite alerta daca certificatul expira in acest numar de zile (ex: 15)
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Alert Email -->
+                        <div class="row mb-4">
+                            <label class="col-md-4 col-form-label">
+                                <strong>Email Alerta</strong>
+                            </label>
+                            <div class="col-md-8">
+                                <input type="email" 
+                                       class="form-control" 
+                                       name="AlertEmail" 
+                                       value="@Model.AlertEmail"
+                                       required>
+                                <small class="text-muted d-block mt-2">
+                                    Adresa email unde vor fi trimise alertele
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Summary -->
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="alert alert-info">
+                                    <strong>📋 Rezumat configurare:</strong><br>
+                                    Verificare zilnica la ora: <strong><span id="summaryHour">@Model.VerificationHour</span>:<span id="summaryMinute">@(Model.VerificationMinute.ToString("D2"))</span></strong><br>
+                                    Zona orara: <strong><span id="summaryTz">@Model.Timezone</span></strong><br>
+                                    Alerta daca expira in: <strong><span id="summaryDays">@Model.AlertDaysThreshold</span> zile</strong><br>
+                                    Email: <strong><span id="summaryEmail">@Model.AlertEmail</span></strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="row">
+                            <div class="col-md-12">
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="fas fa-save"></i> Salveaza Setari
+                                </button>
+                                <button type="button" class="btn btn-outline-info" id="testEmailBtn">
+                                    <i class="fas fa-envelope"></i> Trimite Email Test
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Card -->
+        <div class="col-md-4">
+            <div class="card bg-light">
+                <div class="card-header">
+                    <h6 class="mb-0">ℹ️ Informatii Importante</h6>
+                </div>
+                <div class="card-body small">
+                    <p><strong>Verificare Automata:</strong></p>
+                    <ul>
+                        <li>Se executa zilnic la ora setata</li>
+                        <li>Verifica toate certificatele din lista</li>
+                        <li>Compara zilele ramase cu pragul de alerta</li>
+                    </ul>
+
+                    <p><strong>Alerta:</strong></p>
+                    <ul>
+                        <li>Se trimite daca certificatul expira in pragul setat</li>
+                        <li>Se trimite si daca certificatul e deja expirat</li>
+                        <li>Email test verifica configuratia SMTP</li>
+                    </ul>
+
+                    <p><strong>Hangfire Dashboard:</strong></p>
+                    <ul>
+                        <li>Vizualizare joburi: <a href="@Url.Action("Index", "Home").Replace("Home", "")hangfire" target="_blank">Hangfire</a></li>
+                        <li>Istoricul executiilor</li>
+                        <li>Status verificari</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test Email Form (Hidden) -->
+<form method="post" action="@Url.Action("SendTestEmail")" id="testEmailForm">
+    @Html.AntiForgeryToken()
+</form>
+
+<script>
+    // Update summary on input change
+    const hourInput = document.querySelector('input[name="VerificationHour"]');
+    const minuteInput = document.querySelector('input[name="VerificationMinute"]');
+    const tzSelect = document.getElementById('timezoneSelect');
+    const daysInput = document.querySelector('input[name="AlertDaysThreshold"]');
+    const emailInput = document.querySelector('input[name="AlertEmail"]');
+
+    function updateSummary() {
+        document.getElementById('summaryHour').textContent = String(hourInput.value).padStart(2, '0');
+        document.getElementById('summaryMinute').textContent = String(minuteInput.value).padStart(2, '0');
+        document.getElementById('summaryTz').textContent = tzSelect.value;
+        document.getElementById('summaryDays').textContent = daysInput.value;
+        document.getElementById('summaryEmail').textContent = emailInput.value;
+    }
+
+    hourInput.addEventListener('change', updateSummary);
+    minuteInput.addEventListener('change', updateSummary);
+    tzSelect.addEventListener('change', updateSummary);
+    daysInput.addEventListener('change', updateSummary);
+    emailInput.addEventListener('change', updateSummary);
+
+    // Test email button
+    document.getElementById('testEmailBtn').addEventListener('click', function() {
+        if (confirm('Trimite email test la: ' + emailInput.value + '?')) {
+            document.getElementById('testEmailForm').submit();
+        }
+    });
+</script>

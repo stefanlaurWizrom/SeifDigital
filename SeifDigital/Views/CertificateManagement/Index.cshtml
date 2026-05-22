@@ -1,0 +1,414 @@
+@model List<SeifDigital.Models.ManagedCertificate>
+
+@{
+    ViewData["Title"] = "Management Certificate";
+}
+
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>📜 Management Certificate</h2>
+            <p class="text-muted">Gestionează și monitorizează certificatele SSL/TLS ale site-urilor</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="@Url.Action("Index", "CertificateSettings")" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-cog"></i> ⚙️ Setari Alerta
+            </a>
+        </div>
+    </div>
+
+    <!-- Form Adăugare URL -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">➕ Adăugă URL Nou</h5>
+                </div>
+                <div class="card-body">
+                    <form id="addCertificateForm">
+                        @Html.AntiForgeryToken()
+                        <div class="row">
+                            <div class="col-md-9">
+                                <input type="text" 
+                                       id="urlInput" 
+                                       class="form-control" 
+                                       placeholder="https://example.com" 
+                                       required>
+                                <small class="text-muted d-block mt-2">
+                                    Introduceți URL-ul complet (ex: https://example.com sau https://example.com:8443)
+                                </small>
+                            </div>
+                            <div class="col-md-3">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-plus"></i> Adăugă
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Advanced Options (Origin Server IP/Port) -->
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleAdvanced">
+                                    ⚙️ Opțiuni Avansate
+                                </button>
+                            </div>
+                        </div>
+                        <div id="advancedOptions" style="display:none;" class="row mt-3 pt-3 border-top">
+                            <div class="col-md-6">
+                                <label for="originIP" class="form-label">IP Server de Origine (opțional)</label>
+                                <input type="text" 
+                                       id="originIP" 
+                                       class="form-control" 
+                                       placeholder="192.168.1.1 sau 2001:db8::1">
+                                <small class="text-muted d-block mt-1">
+                                    Adresă IP pentru verificare directă (ignorând CDN/proxy)
+                                </small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="originPort" class="form-label">Port (implicit 443)</label>
+                                <input type="number" 
+                                       id="originPort" 
+                                       class="form-control" 
+                                       placeholder="443" 
+                                       value="443"
+                                       min="1"
+                                       max="65535">
+                                <small class="text-muted d-block mt-1">
+                                    Port HTTPS pe serverul de origine
+                                </small>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabel Certificate -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">📋 Lista Certificatelor (@(Model?.Count ?? 0))</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model?.Count > 0)
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 25%">🌐 URL</th>
+                                        <th style="width: 12%">Status</th>
+                                        <th style="width: 18%">Data Expirare</th>
+                                        <th style="width: 10%">Zile Rămase</th>
+                                        <th style="width: 10%">Verificare</th>
+                                        <th style="width: 10%">Ultima Verificare</th>
+                                        <th style="width: 15%">Acțiuni</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var cert in Model)
+                                    {
+                                        if (cert == null) continue;
+
+                                        var statusClass = (cert.Status ?? "Unknown") switch
+                                        {
+                                            "Valid" => "badge bg-success",
+                                            "Expiring Soon" => "badge bg-warning text-dark",
+                                            "Expired" => "badge bg-danger",
+                                            "Error" => "badge bg-secondary",
+                                            _ => "badge bg-info"
+                                        };
+
+                                        var statusIcon = (cert.Status ?? "Unknown") switch
+                                        {
+                                            "Valid" => "✅",
+                                            "Expiring Soon" => "⚠️",
+                                            "Expired" => "❌",
+                                            "Error" => "⚡",
+                                            _ => "❓"
+                                        };
+
+                                        var daysClass = cert.DaysUntilExpiry.HasValue && cert.DaysUntilExpiry.Value <= 30 
+                                            ? "text-danger fw-bold" 
+                                            : "";
+
+                                        var urlDisplay = cert.Url ?? "N/A";
+                                        var urlForLink = string.IsNullOrEmpty(cert.Url) || cert.Url.StartsWith("https://unknown") 
+                                            ? "#" 
+                                            : cert.Url;
+                                    <tr data-cert-id="@cert.Id">
+                                        <td>
+                                            @if (urlForLink != "#")
+                                            {
+                                                <a href="@urlForLink" target="_blank" class="text-decoration-none">
+                                                    @urlDisplay
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">@urlDisplay</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <span class="@statusClass">
+                                                @statusIcon @(cert.Status ?? "Unknown")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (cert.CertificateExpiryDate.HasValue)
+                                            {
+                                                <span title="@cert.CertificateExpiryDate.Value.ToString("yyyy-MM-dd HH:mm:ss")">
+                                                    @cert.CertificateExpiryDate.Value.ToString("dd.MM.yyyy")
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">-</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <span class="@daysClass">
+                                                @if (cert.DaysUntilExpiry.HasValue)
+                                                {
+                                                    <span>@cert.DaysUntilExpiry zile</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">-</span>
+                                                }
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-light text-dark" title="@(
+                                                cert.VerificationMethod == "Both" 
+                                                    ? "Dual verify: CDN + Direct (Origin cert prioritized)" 
+                                                    : cert.VerificationMethod == "Direct" 
+                                                    ? "Direct connection to origin IP" 
+                                                    : "Via URL/CDN")">
+                                                @if (cert.VerificationMethod == "Both")
+                                                {
+                                                    <span>↔️ Dual</span>
+                                                }
+                                                else if (cert.VerificationMethod == "Direct")
+                                                {
+                                                    <span>→ Direct</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>↗️ CDN</span>
+                                                }
+
+                                                @if (cert.IsCertificateMismatch)
+                                                {
+                                                    <span title="Certificate mismatch between CDN and Origin" class="badge bg-warning text-dark ms-1">⚠️</span>
+                                                }
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (cert.LastCheckDate.HasValue)
+                                            {
+                                                <small title="@cert.LastCheckDate.Value.ToString("yyyy-MM-dd HH:mm:ss")">
+                                                    @cert.LastCheckDate.Value.ToString("HH:mm")
+                                                </small>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">-</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-info refresh-btn" 
+                                                    data-cert-id="@cert.Id"
+                                                    title="Actualizează verificare">
+                                                🔄
+                                            </button>
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-danger delete-btn" 
+                                                    data-cert-id="@cert.Id"
+                                                    title="Șterge din lista">
+                                                🗑️
+                                            </button>
+                                        </td>
+                                    </tr>
+
+                                    @if (!string.IsNullOrEmpty(cert.ErrorMessage))
+                                    {
+                                        <tr class="table-light">
+                                            <td colspan="6">
+                                                <small class="text-danger">
+                                                    <strong>⚠️ Eroare:</strong> @cert.ErrorMessage
+                                                </small>
+                                            </td>
+                                        </tr>
+                                    }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info" role="alert">
+                            <strong>ℹ️ Nicio certificat adăugată</strong><br>
+                            Adaugă un URL folosind formularul de mai sus pentru a monitoriza certificatul SSL/TLS.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal detalii certificat -->
+<div class="modal fade" id="certificateDetailsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📋 Detalii Certificat</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="row">
+                    <dt class="col-sm-4">Subiect:</dt>
+                    <dd class="col-sm-8" id="modalSubject">-</dd>
+
+                    <dt class="col-sm-4">Emitent:</dt>
+                    <dd class="col-sm-8" id="modalIssuer">-</dd>
+
+                    <dt class="col-sm-4">Data Expirare:</dt>
+                    <dd class="col-sm-8" id="modalExpiry">-</dd>
+
+                    <dt class="col-sm-4">Zile Rămase:</dt>
+                    <dd class="col-sm-8" id="modalDaysLeft">-</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Toggle advanced options
+        document.getElementById('toggleAdvanced').addEventListener('click', function(e) {
+            e.preventDefault();
+            const advOptions = document.getElementById('advancedOptions');
+            advOptions.style.display = advOptions.style.display === 'none' ? 'flex' : 'none';
+        });
+
+        // Form adăugare certificat
+        document.getElementById('addCertificateForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const url = document.getElementById('urlInput').value.trim();
+            const originIP = document.getElementById('originIP').value.trim();
+            const originPort = document.getElementById('originPort').value.trim() || '443';
+
+            if (!url) {
+                alert('Introduceți un URL');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('url', url);
+                if (originIP) {
+                    formData.append('originIP', originIP);
+                    formData.append('originPort', originPort);
+                }
+
+                // Obține CSRF token din hidden input
+                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+                console.log('CSRF Token:', token ? 'Found' : 'NOT FOUND');
+                if (token) {
+                    formData.append('__RequestVerificationToken', token);
+                }
+
+                console.log('Sending request to:', '@Url.Action("AddCertificate", "CertificateManagement")');
+                const response = await fetch('@Url.Action("AddCertificate", "CertificateManagement")', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                console.log('Response status:', response.status);
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                if (data.success) {
+                    alert('Certificatul a fost adăugat cu succes!');
+                    // Reîncarcă pagina forțat (hard refresh) după a se sigura că tranzacția DB este completă
+                    setTimeout(() => {
+                        window.location.reload(true);
+                    }, 1000);
+                } else {
+                    alert('Eroare: ' + (data.message || 'Necunoscut'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Eroare: ' + error.message);
+            }
+        });
+
+        // Refresh certificat
+        document.querySelectorAll('.refresh-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const certId = this.getAttribute('data-cert-id');
+
+                try {
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+                    const formData = new FormData();
+                    if (token) formData.append('__RequestVerificationToken', token);
+
+                    const response = await fetch('@Url.Action("RefreshCertificate", "CertificateManagement")/' + certId, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        alert('Certificatul a fost actualizat!');
+                        setTimeout(() => {
+                            window.location.reload(true);
+                        }, 1000);
+                    } else {
+                        alert('Eroare la actualizare');
+                    }
+                } catch (error) {
+                    alert('Eroare: ' + error.message);
+                }
+            });
+        });
+
+        // Șterge certificat
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                if (!confirm('Sunteți sigur că doriți să ștergeți acest URL din lista?')) return;
+
+                const certId = this.getAttribute('data-cert-id');
+
+                try {
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+                    const formData = new FormData();
+                    if (token) formData.append('__RequestVerificationToken', token);
+
+                    const response = await fetch('@Url.Action("RemoveCertificate", "CertificateManagement")/' + certId, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        alert('Certificatul a fost șters cu succes!');
+                        setTimeout(() => {
+                            window.location.reload(true);
+                        }, 1000);
+                    } else {
+                        alert('Eroare la ștergere');
+                    }
+                } catch (error) {
+                    alert('Eroare: ' + error.message);
+                }
+            });
+        });
+    </script>
+}

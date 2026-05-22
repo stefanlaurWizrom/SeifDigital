@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using SeifDigital.Data;
 using SeifDigital.Filters;
 using SeifDigital.Services;
+using Hangfire;
+using Hangfire.SqlServer;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +12,25 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
+
+// ✅ Hangfire Configuration
+builder.Services.AddHangfire(config =>
+{
+    config.UseSqlServerStorage(connectionString, new SqlServerStorageOptions
+    {
+        CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+        SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+        UseRecommendedIsolationLevel = true,
+        UsePageLocksOnDequeue = true,
+        DisableGlobalLocks = true
+    });
+});
+
+builder.Services.AddHangfireServer(options =>
+{
+    options.WorkerCount = Environment.ProcessorCount * 2;
+    options.ServerTimeout = TimeSpan.FromMinutes(4);
+});
 
 // ✅ NOU: Mărire limită upload fișiere (default ~28.6 MB)
 // Setare pentru Kestrel server
@@ -66,6 +87,11 @@ builder.Services.AddScoped<UserProfileService>();
 
 builder.Services.AddScoped<UserAccountService>();
 
+// ✅ Certificate Management Services
+builder.Services.AddScoped<CertificateCheckService>();
+builder.Services.AddScoped<CertificateSettingsService>();
+builder.Services.AddScoped<CertificateScheduledCheckService>();
+
 builder.Services.Configure<CryptoOptions>(builder.Configuration.GetSection("Crypto"));
 builder.Services.AddSingleton<EncryptionService>();
 builder.Services.AddHttpContextAccessor();
@@ -78,6 +104,12 @@ app.UseStaticFiles();
 app.UseRouting();
 
 app.UseSession();
+
+// ✅ Hangfire Dashboard (admin only access)
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireAuthorizationFilter() }
+});
 
 // IMPORTANT: nu mai folosim Windows Negotiate
 // app.UseAuthentication();
@@ -131,4 +163,27 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
+// ✅ Configure Hangfire Recurring Job for Certificate Verification
+// Executes daily at configured hour and minute (default: 8:00 AM)
+using (var scope = app.Services.CreateScope())
+{
+    var settingsService = scope.ServiceProvider.GetRequiredService<CertificateSettingsService>();
+    var verificationHour = await settingsService.GetVerificationHourAsync();
+    var verificationMinute = await settingsService.GetVerificationMinuteAsync();
+    var timezone = await settingsService.GetTimezoneAsync();
+
+    // Cron expression: "{minute} {hour} * * *" means at HH:MM every day
+    // Example: "0 8 * * *" = 08:00 every day, "30 14 * * *" = 14:30 every day
+    string cronExpression = $"{verificationMinute} {verificationHour} * * *";
+
+    RecurringJob.AddOrUpdate<CertificateScheduledCheckService>(
+        "certificate-check",
+        service => service.ExecuteAsync(),
+        cronExpression,
+        TimeZoneInfo.FindSystemTimeZoneById(timezone));
+
+    System.Diagnostics.Debug.WriteLine($"[Startup] Hangfire job registered - Cron: {cronExpression}, Timezone: {timezone}");
+}
+
 app.Run();
+

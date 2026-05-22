@@ -22,6 +22,10 @@ namespace SeifDigital.Data
         public DbSet<UserAccount> UserAccounts { get; set; }
         public DbSet<UserMessage> UserMessages { get; set; }
 
+        // ✅ Certificate Management
+        public DbSet<ManagedCertificate> ManagedCertificates { get; set; }
+        public DbSet<CertificateAlertLog> CertificateAlertLogs { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -295,6 +299,122 @@ namespace SeifDigital.Data
 
                 e.HasIndex(x => x.RecipientOwnerKey);
                 e.HasIndex(x => x.SourceType);
+            });
+
+            // =========================
+            // ManagedCertificate (dbo.ManagedCertificates)
+            // =========================
+            modelBuilder.Entity<ManagedCertificate>(e =>
+            {
+                e.ToTable("ManagedCertificates", "dbo");
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.Url)
+                    .HasMaxLength(2048)
+                    .IsRequired();
+
+                e.Property(x => x.Status)
+                    .HasMaxLength(50)
+                    .IsRequired()
+                    .HasDefaultValue("Unknown");
+
+                e.Property(x => x.CertificateExpiryDate)
+                    .HasColumnType("datetime2(3)");
+
+                e.Property(x => x.LastCheckDate)
+                    .HasColumnType("datetime2(3)");
+
+                e.Property(x => x.CreatedDate)
+                    .HasColumnType("datetime2(3)")
+                    .IsRequired()
+                    .HasDefaultValueSql("GETUTCDATE()");
+
+                e.Property(x => x.DaysUntilExpiry);
+
+                e.Property(x => x.CertificateSubject)
+                    .HasMaxLength(512);
+
+                e.Property(x => x.CertificateIssuer)
+                    .HasMaxLength(512);
+
+                e.Property(x => x.ErrorMessage)
+                    .HasMaxLength(1024);
+
+                // Origin server verification fields
+                e.Property(x => x.OriginServerIP)
+                    .HasMaxLength(45);  // IPv6 max length
+
+                e.Property(x => x.OriginServerPort)
+                    .HasDefaultValue(443);
+
+                e.Property(x => x.OriginCertificateExpiryDate)
+                    .HasColumnType("datetime2(3)");
+
+                e.Property(x => x.OriginCertificateSubject)
+                    .HasMaxLength(512);
+
+                e.Property(x => x.OriginCertificateIssuer)
+                    .HasMaxLength(512);
+
+                e.Property(x => x.VerificationMethod)
+                    .HasMaxLength(20);
+
+                e.Property(x => x.IsCertificateMismatch)
+                    .HasDefaultValue(false);
+
+                e.Property(x => x.OriginDaysUntilExpiry);
+
+                e.HasIndex(x => x.Url);
+            });
+
+            // =========================
+            // CertificateAlertLog (dbo.CertificateAlertLog)
+            // =========================
+            modelBuilder.Entity<CertificateAlertLog>(e =>
+            {
+                e.ToTable("CertificateAlertLog", "dbo");
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.ManagedCertificateId)
+                    .IsRequired();
+
+                e.Property(x => x.CertificateUrl)
+                    .HasMaxLength(2048)
+                    .IsRequired();
+
+                e.Property(x => x.DaysUntilExpiry)
+                    .IsRequired();
+
+                e.Property(x => x.AlertType)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                e.Property(x => x.EmailSentTo)
+                    .HasMaxLength(256)
+                    .IsRequired();
+
+                e.Property(x => x.AlertSentDateUtc)
+                    .HasColumnType("datetime2(3)")
+                    .IsRequired()
+                    .HasDefaultValueSql("GETUTCDATE()");
+
+                e.Property(x => x.EmailStatus)
+                    .HasMaxLength(20)
+                    .IsRequired()
+                    .HasDefaultValue("Pending");
+
+                e.Property(x => x.ErrorMessage)
+                    .HasMaxLength(1024);
+
+                // Relationship to ManagedCertificate
+                e.HasOne(x => x.ManagedCertificate)
+                    .WithMany()
+                    .HasForeignKey(x => x.ManagedCertificateId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Indexes for performance
+                e.HasIndex(x => x.ManagedCertificateId);
+                e.HasIndex(x => x.AlertSentDateUtc);
             });
         }
     }
