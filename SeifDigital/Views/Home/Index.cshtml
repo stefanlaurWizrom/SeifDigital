@@ -547,23 +547,74 @@
 
             if (!span || !btn) return;
 
-            if (span.dataset.visible !== "1") {
-                alert("Întâi apasă «Arată parola», apoi poți copia.");
-                return;
-            }
-
-            const parola = span.textContent || "";
-            if (!parola || parola === "••••••") {
-                alert("Nu am ce copia.");
-                return;
-            }
-
             const oldText = btn.textContent;
             btn.disabled = true;
             btn.textContent = "Copiez...";
 
+            let parolaObtinuta = null;
+
+            // ✅ SCENARIO 1: Parola e deja afișată (de la "Arată parola")
+            if (span.dataset.visible === "1") {
+                parolaObtinuta = span.textContent || "";
+                if (!parolaObtinuta || parolaObtinuta === "••••••") {
+                    btn.textContent = oldText;
+                    btn.disabled = false;
+                    alert("Nu am ce copia.");
+                    return;
+                }
+            } 
+            // ✅ SCENARIO 2 (NOU): Parola e ascunsă, fetch-uim din server
+            else {
+                try {
+                    const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+                    const token = tokenInput ? tokenInput.value : "";
+
+                    const response = await fetch("/Home/GetParolaJson", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+                        },
+                        body: `id=${encodeURIComponent(id)}&__RequestVerificationToken=${encodeURIComponent(token)}`
+                    });
+
+                    if (response.status === 401) {
+                        btn.textContent = oldText;
+                        btn.disabled = false;
+                        alert("Sesiune expirată sau 2FA nevalidat. Reîncarcă pagina.");
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        btn.textContent = oldText;
+                        btn.disabled = false;
+                        alert("Eroare la preluarea parolei. Încearcă din nou.");
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    if (!data || data.ok !== true || !data.parola) {
+                        btn.textContent = oldText;
+                        btn.disabled = false;
+                        alert(data?.message || "Nu pot accesa parola.");
+                        return;
+                    }
+
+                    parolaObtinuta = data.parola;
+                    console.log("✅ [Copy] Parolă fetch-uită din server (fără afișare)");
+                }
+                catch (err) {
+                    console.error("❌ [Copy] Eroare la fetch parolă:", err);
+                    btn.textContent = oldText;
+                    btn.disabled = false;
+                    alert("Eroare de rețea la preluarea parolei.");
+                    return;
+                }
+            }
+
+            // ✅ COPIAZĂ ÎN CLIPBOARD (de la orice sursă: Scenario 1 sau 2)
             try {
-                await navigator.clipboard.writeText(parola);
+                await navigator.clipboard.writeText(parolaObtinuta);
 
                 btn.textContent = "Copiat!";
                 btn.classList.remove("btn-outline-primary");
@@ -581,11 +632,12 @@
                 }, 1500);
             }
             catch (e) {
-                console.error(e);
+                console.error("❌ [Clipboard API] Eroare:", e);
 
+                // Fallback: document.execCommand("copy")
                 try {
                     const tmp = document.createElement("textarea");
-                    tmp.value = parola;
+                    tmp.value = parolaObtinuta;
                     tmp.style.position = "fixed";
                     tmp.style.left = "-9999px";
                     document.body.appendChild(tmp);

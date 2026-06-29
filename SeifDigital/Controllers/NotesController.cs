@@ -13,14 +13,16 @@ namespace SeifDigital.Controllers
         private readonly ApplicationDbContext _db;
         private readonly UserFileService _userFileService;  // ✅ NOU
         private readonly SettingsService _settings;  // ✅ NOU
+        private readonly SmtpEmailSender _email;  // ✅ NOU: Email service
 
-        public NotesController(UserNoteService notes, AuditService audit, ApplicationDbContext db, UserFileService userFileService, SettingsService settings)
+        public NotesController(UserNoteService notes, AuditService audit, ApplicationDbContext db, UserFileService userFileService, SettingsService settings, SmtpEmailSender email)
         {
             _notes = notes;
             _audit = audit;
             _db = db;
             _userFileService = userFileService;  // ✅ NOU
             _settings = settings;  // ✅ NOU
+            _email = email;  // ✅ NOU: Email service
         }
 
         [HttpGet]
@@ -196,6 +198,31 @@ namespace SeifDigital.Controllers
 
             _db.UserMessages.Add(msg);
             await _db.SaveChangesAsync();
+
+            // ✅ NOU: Trimite email către destinatar
+            try
+            {
+                string subject = "Mesaj nou în WizVault";
+                string body = $@"Ati primit un mesaj nou in Wizvault
+
+https://wizvault.wizpro.ro/";
+
+                _email.Send(recipientEmail, subject, body);
+
+                _audit.Log(HttpContext, "Message.Send.Email", "Success",
+                    targetType: "UserMessage",
+                    targetId: msg.Id.ToString(),
+                    details: new { to = recipientEmail, subject });
+            }
+            catch (Exception ex)
+            {
+                _audit.Log(HttpContext, "Message.Send.Email", "Error",
+                    targetType: "UserMessage",
+                    targetId: msg.Id.ToString(),
+                    reason: "SmtpError",
+                    details: new { to = recipientEmail, error = ex.Message });
+                // ⚠️ Nu aruncăm eroare - mesajul a fost salvat în DB oricum
+            }
 
             _audit.Log(HttpContext, "Message.Send", "Success",
                 targetType: "UserMessage",

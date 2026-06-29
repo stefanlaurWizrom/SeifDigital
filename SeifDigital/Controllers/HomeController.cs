@@ -19,19 +19,22 @@ namespace SeifDigital.Controllers
         private readonly EncryptionService _crypto;
         private readonly UserFileService _userFileService;  // ✅ NOU
         private readonly SettingsService _settings;  // ✅ NOU
+        private readonly SmtpEmailSender _email;  // ✅ NOU: Email service
 
         public HomeController(
             ApplicationDbContext context, 
             EncryptionService crypto, 
             AuditService audit,
             UserFileService userFileService,  // ✅ NOU
-            SettingsService settings)  // ✅ NOU
+            SettingsService settings,  // ✅ NOU
+            SmtpEmailSender email)  // ✅ NOU: Email service
         {
             _context = context;
             _crypto = crypto;
             _audit = audit;
             _userFileService = userFileService;  // ✅ NOU
             _settings = settings;  // ✅ NOU
+            _email = email;  // ✅ NOU: Email service
         }
 
         // Pagina principală (căutare + paginare 25/pg)
@@ -516,6 +519,31 @@ namespace SeifDigital.Controllers
 
             _context.UserMessages.Add(msg);
             await _context.SaveChangesAsync();
+
+            // ✅ NOU: Trimite email către destinatar
+            try
+            {
+                string subject = "Mesaj nou în WizVault";
+                string body = $@"Ati primit un mesaj nou in Wizvault
+
+https://wizvault.wizpro.ro/";
+
+                _email.Send(recipientEmail, subject, body);
+
+                _audit.Log(HttpContext, "Message.Send.Email", "Success",
+                    targetType: "UserMessage",
+                    targetId: msg.Id.ToString(),
+                    details: new { to = recipientEmail, subject });
+            }
+            catch (Exception ex)
+            {
+                _audit.Log(HttpContext, "Message.Send.Email", "Error",
+                    targetType: "UserMessage",
+                    targetId: msg.Id.ToString(),
+                    reason: "SmtpError",
+                    details: new { to = recipientEmail, error = ex.Message });
+                // ⚠️ Nu aruncăm eroare - mesajul a fost salvat în DB oricum
+            }
 
             _audit.Log(HttpContext, "Message.Send", "Success",
             targetType: "UserMessage",
