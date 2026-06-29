@@ -467,8 +467,6 @@ Echipa WizVault
                 var deletedByEmail = deletedUser.DeletedBy ?? "Necunoscut";
                 var subject = "🚨 WizVault - Utilizator șters de administrator";
                 var body = $@"
-Bună administratore,
-
 Un utilizator a fost șters din sistem de către alt administrator.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
