@@ -271,6 +271,30 @@ namespace SeifDigital.Data
                 e.Property(x => x.IsAdmin)
                     .HasColumnType("bit")
                     .IsRequired();
+
+                // Soft Delete Properties
+                e.Property(x => x.IsDeleted)
+                    .HasColumnType("bit")
+                    .IsRequired()
+                    .HasDefaultValue(false);
+
+                e.Property(x => x.DeletedUtc)
+                    .HasColumnType("datetime2(3)")
+                    .IsRequired(false);
+
+                e.Property(x => x.DeletedBy)
+                    .HasMaxLength(256)
+                    .IsRequired(false);
+
+                // Global Query Filter - Exclude soft deleted users
+                e.HasQueryFilter(u => !u.IsDeleted);
+
+                // Indexes for soft delete performance
+                e.HasIndex(x => x.IsDeleted)
+                    .IncludeProperties(u => new { u.Email, u.IsActive, u.IsAdmin });
+
+                e.HasIndex(x => new { x.IsDeleted, x.IsActive })
+                    .IncludeProperties(u => new { u.Email, u.IsAdmin });
             });
 
             // =========================

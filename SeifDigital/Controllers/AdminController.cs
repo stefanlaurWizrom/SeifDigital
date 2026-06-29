@@ -57,12 +57,17 @@ namespace SeifDigital.Controllers
 
         // API: Lista utilizatori
         [HttpGet]
-        public async Task<IActionResult> GetUsers()
+        public async Task<IActionResult> GetUsers(bool includeDeleted = false)
         {
             if (!IsAdmin())
                 return Forbid();
 
-            var users = await _context.UserAccounts
+            var query = _context.UserAccounts.AsQueryable();
+
+            if (includeDeleted)
+                query = query.IgnoreQueryFilters();
+
+            var users = await query
                 .Select(u => new
                 {
                     u.Id,
@@ -70,7 +75,10 @@ namespace SeifDigital.Controllers
                     u.IsAdmin,
                     u.IsActive,
                     u.CreatedUtc,
-                    u.UpdatedUtc
+                    u.UpdatedUtc,
+                    u.IsDeleted,
+                    u.DeletedUtc,
+                    u.DeletedBy
                 })
                 .ToListAsync();
 
@@ -342,6 +350,189 @@ Echipa WizVault
                     success = false, 
                     message = $"Eroare la trimiterea emailului: {ex.Message}" 
                 });
+            }
+        }
+
+        // ========================================
+        // SOFT DELETE USER
+        // ========================================
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> DeleteUser(long userId)
+        {
+            if (!IsAdmin())
+                return Forbid();
+
+            var user = await _context.UserAccounts
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null)
+                return NotFound();
+
+            if (user.IsDeleted)
+                return BadRequest(new { success = false, message = "Utilizator deja șters" });
+
+            // Soft delete
+            user.IsDeleted = true;
+            user.DeletedUtc = DateTime.UtcNow;
+            user.DeletedBy = HttpContext.Session.GetString("OwnerKey") ?? "Necunoscut";
+            user.UpdatedUtc = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            // Audit log
+            _audit.Log(HttpContext, "Admin.DeleteUser", "Success",
+                details: new 
+                { 
+                    userId, 
+                    email = user.Email,
+                    action = "Utilizator șters (soft delete)",
+                    deletedBy = user.DeletedBy,
+                    timestamp = user.DeletedUtc
+                });
+
+            // Notifică alți admini
+            NotifyAdminsUserDeleted(user);
+
+            return Ok(new { success = true, message = "Utilizator șters cu succes" });
+        }
+
+        // ========================================
+        // RESTORE USER
+        // ========================================
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> RestoreUser(long userId)
+        {
+            if (!IsAdmin())
+                return Forbid();
+
+            var user = await _context.UserAccounts
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null)
+                return NotFound();
+
+            if (!user.IsDeleted)
+                return BadRequest(new { success = false, message = "Utilizator nu este șters" });
+
+            // Restore
+            user.IsDeleted = false;
+            user.DeletedUtc = null;
+            user.DeletedBy = null;
+            user.UpdatedUtc = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            // Audit log
+            _audit.Log(HttpContext, "Admin.RestoreUser", "Success",
+                details: new 
+                { 
+                    userId, 
+                    email = user.Email,
+                    action = "Utilizator restaurat",
+                    restoredBy = HttpContext.Session.GetString("OwnerKey") ?? "Necunoscut"
+                });
+
+            return Ok(new { success = true, message = "Utilizator restaurat cu succes" });
+        }
+
+        // ========================================
+        // NOTIFY ADMINS - USER DELETED
+        // ========================================
+        private void NotifyAdminsUserDeleted(UserAccount deletedUser)
+        {
+            try
+            {
+                // Găsesc toți admini (exceptând cel care a șters și utilizatorul șters)
+                var otherAdmins = _context.UserAccounts
+                    .IgnoreQueryFilters()
+                    .Where(u => u.IsAdmin && !u.IsDeleted)
+                    .Select(u => new { u.Email, u.Id })
+                    .ToList();
+
+                _audit.Log(HttpContext, "Admin.NotifyAdmins.Query", "Success",
+                    details: new { totalAdmins = otherAdmins.Count, deletedUserEmail = deletedUser.Email });
+
+                if (!otherAdmins.Any())
+                {
+                    _audit.Log(HttpContext, "Admin.NotifyAdmins", "Info", 
+                        reason: "NoAdminsToNotify", 
+                        details: new { message = "Nu sunt alți admini activi pentru notificare" });
+                    return;
+                }
+
+                var deletedByEmail = deletedUser.DeletedBy ?? "Necunoscut";
+                var subject = "🚨 WizVault - Utilizator șters de administrator";
+                var body = $@"
+Bună administratore,
+
+Un utilizator a fost șters din sistem de către alt administrator.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📧 UTILIZATOR ȘTERS: {deletedUser.Email}
+👤 ȘTERS DE: {deletedByEmail}
+⏰ DATA: {deletedUser.DeletedUtc:dd.MM.yyyy HH:mm:ss UTC}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Datele utilizatorului sunt păstrate și pot fi restaurate din Admin Panel.
+
+Mulțumim,
+WizVault by Wizrom Software
+";
+
+                int sentCount = 0;
+                int failCount = 0;
+
+                foreach (var admin in otherAdmins)
+                {
+                    try
+                    {
+                        _emailSender.Send(admin.Email, subject, body);
+                        sentCount++;
+
+                        _audit.Log(HttpContext, "Admin.NotifyAdmins.Sent", "Success",
+                            details: new { toEmail = admin.Email, deletedUserEmail = deletedUser.Email });
+                    }
+                    catch (Exception exEmail)
+                    {
+                        failCount++;
+
+                        _audit.Log(HttpContext, "Admin.NotifyAdmins.Sent", "Fail",
+                            reason: "SmtpError",
+                            details: new 
+                            { 
+                                toEmail = admin.Email, 
+                                deletedUserEmail = deletedUser.Email,
+                                error = exEmail.Message,
+                                exceptionType = exEmail.GetType().Name
+                            });
+                    }
+                }
+
+                _audit.Log(HttpContext, "Admin.NotifyAdmins.Summary", "Success",
+                    details: new 
+                    { 
+                        sentCount, 
+                        failCount, 
+                        totalAttempted = otherAdmins.Count,
+                        deletedUserEmail = deletedUser.Email,
+                        deletedBy = deletedByEmail
+                    });
+            }
+            catch (Exception ex)
+            {
+                _audit.Log(HttpContext, "Admin.NotifyAdmins.Fatal", "Fail",
+                    reason: "FatalError",
+                    details: new 
+                    { 
+                        error = ex.Message,
+                        exceptionType = ex.GetType().Name,
+                        stackTrace = ex.StackTrace,
+                        deletedUserEmail = deletedUser.Email
+                    });
             }
         }
     }

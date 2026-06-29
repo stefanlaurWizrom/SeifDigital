@@ -44,19 +44,56 @@
     <!-- Secțiunea Utilizatori -->
     <div class="mt-5">
         <h2>Utilizatori</h2>
-        <table id="usersTable" class="table table-striped table-hover">
-            <thead class="table-dark">
-                <tr>
-                    <th>ID</th>
-                    <th>Email</th>
-                    <th>Admin</th>
-                    <th>Activ</th>
-                    <th>Creat la</th>
-                    <th>Acțiuni</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+
+        <!-- Tabs pentru Utilizatori Active / Șterși -->
+        <ul class="nav nav-tabs" id="usersTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="activeUsers-tab" data-bs-toggle="tab" data-bs-target="#activeUsers" type="button" role="tab" aria-controls="activeUsers" aria-selected="true">
+                    ✓ Utilizatori Activi
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="deletedUsers-tab" data-bs-toggle="tab" data-bs-target="#deletedUsers" type="button" role="tab" aria-controls="deletedUsers" aria-selected="false">
+                    🗑️ Utilizatori Șterși
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="usersTabContent">
+            <!-- Utilizatori Activi -->
+            <div class="tab-pane fade show active" id="activeUsers" role="tabpanel" aria-labelledby="activeUsers-tab">
+                <table id="usersTable" class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Email</th>
+                            <th>Admin</th>
+                            <th>Activ</th>
+                            <th>Creat la</th>
+                            <th>Acțiuni</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- Utilizatori Șterși -->
+            <div class="tab-pane fade" id="deletedUsers" role="tabpanel" aria-labelledby="deletedUsers-tab">
+                <table id="deletedUsersTable" class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Email</th>
+                            <th>Șters la</th>
+                            <th>Șters de</th>
+                            <th>Acțiuni</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -81,12 +118,67 @@
     </div>
 </div>
 
+<!-- Modal Confirmare Delete User -->
+<div id="deleteUserModal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">⚠️ Confirmare Ștergere Utilizator</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Ești sigur că vrei să ștergi utilizatorul?</p>
+                <p><strong id="deleteUserEmail"></strong></p>
+                <p class="text-muted small">
+                    ℹ️ Datele utilizatorului nu vor fi șterse permanent. Poți readmite utilizatorul mai târziu din secțiunea "Utilizatori Șterși".
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulează</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmDelete">
+                    🗑️ Șterge Utilizator
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmare Restore User -->
+<div id="restoreUserModal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content border-success">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">🔄 Confirmare Restaurare Utilizator</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Ești sigur că vrei să readmiti utilizatorul?</p>
+                <p><strong id="restoreUserEmail"></strong></p>
+                <p class="text-muted small">
+                    ℹ️ Utilizatorul va putea să se autentifice din nou și va accesa toate datele sale.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Anulează</button>
+                <button type="button" class="btn btn-success" id="btnConfirmRestore">
+                    🔄 Restaurează Utilizator
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     // Variabile globale pentru modal
     let currentResetData = null;
     let currentUserId = null;
     document.addEventListener('DOMContentLoaded', function () {
         loadUsers();
+
+        // Încarcă utilizatori șterși când se deschide tab-ul
+        document.getElementById('deletedUsers-tab').addEventListener('shown.bs.tab', function() {
+            loadDeletedUsers();
+        });
     });
 
     function loadUsers() {
@@ -127,6 +219,11 @@
                                         onclick="resetUserPassword(${user.id}, '${user.email}', event)"
                                         title="Resetează parola utilizatorului">
                                     🔑 Reset Pass
+                                </button>
+                                <button class="btn btn-outline-danger" 
+                                        onclick="deleteUser(${user.id}, '${user.email}', event)"
+                                        title="Șterge utilizatorul (soft delete)">
+                                    🗑️ Delete
                                 </button>
                             </div>
                         </td>
@@ -372,4 +469,172 @@
             alert('Eroare la trimiterea emailului!');
         });
     }
+
+    // ========================================
+    // DELETE USER FUNCTIONS
+    // ========================================
+    let deleteModalData = null;
+
+    function deleteUser(userId, userEmail, event) {
+        event.preventDefault();
+
+        deleteModalData = { userId, userEmail };
+        document.getElementById('deleteUserEmail').textContent = userEmail;
+
+        const modal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
+        modal.show();
+    }
+
+    document.getElementById('btnConfirmDelete').addEventListener('click', function() {
+        if (!deleteModalData) return;
+
+        const { userId, userEmail } = deleteModalData;
+
+        // Dezactivează butonul
+        const btn = this;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '⏳ Se șterge...';
+
+        fetch(`/Admin/DeleteUser?userId=${userId}`, { method: 'POST' })
+            .then(response => {
+                if (response.status === 403) {
+                    alert('Nu ai permisiuni!');
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    return null;
+                }
+                return response.json();
+            })
+            .then(data => {
+                btn.disabled = false;
+                btn.textContent = originalText;
+
+                if (data && data.success) {
+                    // Închide modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('deleteUserModal'));
+                    if (modal) modal.hide();
+
+                    // Reîncarcă utilizatori
+                    loadUsers();
+
+                    alert(`✅ Utilizator ${userEmail} șters cu succes!`);
+                } else if (data) {
+                    alert('Eroare: ' + (data.message || 'Operație eșuată'));
+                }
+            })
+            .catch(error => {
+                console.error('Eroare:', error);
+                btn.disabled = false;
+                btn.textContent = originalText;
+                alert('Eroare la ștergere!');
+            });
+
+        deleteModalData = null;
+    });
+
+    // ========================================
+    // LOAD DELETED USERS
+    // ========================================
+    function loadDeletedUsers() {
+        fetch('/Admin/GetUsers?includeDeleted=true')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.querySelector('#deletedUsersTable tbody');
+                tbody.innerHTML = '';
+
+                // Filtrează doar utilizatori șterși
+                const deletedUsers = data.filter(u => u.isDeleted);
+
+                if (deletedUsers.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nu sunt utilizatori șterși</td></tr>';
+                    return;
+                }
+
+                deletedUsers.forEach(user => {
+                    const row = document.createElement('tr');
+                    const deletedDate = new Date(user.deletedUtc).toLocaleString('ro-RO');
+
+                    row.innerHTML = `
+                        <td>${user.id}</td>
+                        <td>${user.email}</td>
+                        <td>${deletedDate}</td>
+                        <td>${user.deletedBy || 'Necunoscut'}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-success" 
+                                    onclick="restoreUser(${user.id}, '${user.email}', event)"
+                                    title="Restaurează utilizatorul">
+                                🔄 Restaurează
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .catch(error => console.error('Eroare:', error));
+    }
+
+    // ========================================
+    // RESTORE USER FUNCTIONS
+    // ========================================
+    let restoreModalData = null;
+
+    function restoreUser(userId, userEmail, event) {
+        event.preventDefault();
+
+        restoreModalData = { userId, userEmail };
+        document.getElementById('restoreUserEmail').textContent = userEmail;
+
+        const modal = new bootstrap.Modal(document.getElementById('restoreUserModal'));
+        modal.show();
+    }
+
+    document.getElementById('btnConfirmRestore').addEventListener('click', function() {
+        if (!restoreModalData) return;
+
+        const { userId, userEmail } = restoreModalData;
+
+        // Dezactivează butonul
+        const btn = this;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '⏳ Se restaurează...';
+
+        fetch(`/Admin/RestoreUser?userId=${userId}`, { method: 'POST' })
+            .then(response => {
+                if (response.status === 403) {
+                    alert('Nu ai permisiuni!');
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    return null;
+                }
+                return response.json();
+            })
+            .then(data => {
+                btn.disabled = false;
+                btn.textContent = originalText;
+
+                if (data && data.success) {
+                    // Închide modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('restoreUserModal'));
+                    if (modal) modal.hide();
+
+                    // Reîncarcă amândoi tabelele
+                    loadUsers();
+                    loadDeletedUsers();
+
+                    alert(`✅ Utilizator ${userEmail} restaurat cu succes!`);
+                } else if (data) {
+                    alert('Eroare: ' + (data.message || 'Operație eșuată'));
+                }
+            })
+            .catch(error => {
+                console.error('Eroare:', error);
+                btn.disabled = false;
+                btn.textContent = originalText;
+                alert('Eroare la restaurare!');
+            });
+
+        restoreModalData = null;
+    });
 </script>

@@ -21,5 +21,10 @@ namespace SeifDigital.Models
         public bool IsActive { get; set; } = true;
         public bool IsAdmin { get; set; } = false;
 
+        // Soft Delete
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedUtc { get; set; } = null;
+        public string? DeletedBy { get; set; } = null;
+
     }
 }
