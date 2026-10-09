@@ -67,10 +67,10 @@
                     <thead class="table-dark">
                         <tr>
                             <th>ID</th>
-                            <th>Email</th>
-                            <th>Admin</th>
-                            <th>Activ</th>
-                            <th>Creat la</th>
+                            <th>Email <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-white text-decoration-none" onclick="sortUsers('email')" title="Sortează">⇅</button></th>
+                            <th>Admin <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-white text-decoration-none" onclick="sortUsers('isAdmin')" title="Sortează">⇅</button></th>
+                            <th>Activ <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-white text-decoration-none" onclick="sortUsers('isActive')" title="Sortează">⇅</button></th>
+                            <th>Creat la <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-white text-decoration-none" onclick="sortUsers('createdUtc')" title="Sortează">⇅</button></th>
                             <th>Acțiuni</th>
                         </tr>
                     </thead>
@@ -84,9 +84,9 @@
                     <thead class="table-dark">
                         <tr>
                             <th>ID</th>
-                            <th>Email</th>
-                            <th>Șters la</th>
-                            <th>Șters de</th>
+                            <th>Email <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-white text-decoration-none" onclick="sortDeletedUsers('email')" title="Sortează">⇅</button></th>
+                            <th>Șters la <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-white text-decoration-none" onclick="sortDeletedUsers('deletedUtc')" title="Sortează">⇅</button></th>
+                            <th>Șters de <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-white text-decoration-none" onclick="sortDeletedUsers('deletedBy')" title="Sortează">⇅</button></th>
                             <th>Acțiuni</th>
                         </tr>
                     </thead>
@@ -172,6 +172,10 @@
     // Variabile globale pentru modal
     let currentResetData = null;
     let currentUserId = null;
+    let usersData = [];
+    let usersSort = { key: null, dir: 'asc' };
+    let deletedUsersData = [];
+    let deletedUsersSort = { key: null, dir: 'asc' };
     document.addEventListener('DOMContentLoaded', function () {
         loadUsers();
 
@@ -185,11 +189,18 @@
         fetch('/Admin/GetUsers')
             .then(response => response.json())
             .then(data => {
-                const tbody = document.querySelector('#usersTable tbody');
-                tbody.innerHTML = '';
+                usersData = data;
+                renderUsers();
+            })
+            .catch(error => console.error('Eroare:', error));
+    }
 
-                data.forEach(user => {
-                    const row = document.createElement('tr');
+    function renderUsers() {
+        const tbody = document.querySelector('#usersTable tbody');
+        tbody.innerHTML = '';
+
+        sortUsersData(usersData).forEach(user => {
+            const row = document.createElement('tr');
                     row.innerHTML = `
                         <td>${user.id}</td>
                         <td>${user.email}</td>
@@ -229,9 +240,34 @@
                         </td>
                     `;
                     tbody.appendChild(row);
-                });
-            })
-            .catch(error => console.error('Eroare:', error));
+        });
+    }
+
+    function sortUsers(key) {
+        usersSort = {
+            key: key,
+            dir: usersSort.key === key && usersSort.dir === 'asc' ? 'desc' : 'asc'
+        };
+        renderUsers();
+    }
+
+    function sortUsersData(users) {
+        if (!usersSort.key) return users;
+
+        const factor = usersSort.dir === 'asc' ? 1 : -1;
+        return [...users].sort((a, b) => {
+            const va = getUserSortValue(a, usersSort.key);
+            const vb = getUserSortValue(b, usersSort.key);
+            const cmp = typeof va === 'number' ? va - vb : va.localeCompare(vb, 'ro');
+            return cmp * factor;
+        });
+    }
+
+    function getUserSortValue(user, key) {
+        if (key === 'isAdmin') return user.isAdmin ? 'Admin' : 'User';
+        if (key === 'isActive') return user.isActive ? 'Activ' : 'Inactiv';
+        if (key === 'email') return user.email;
+        return new Date(user.createdUtc).getTime();
     }
 
     function toggleAdmin(userId, event) {
@@ -540,18 +576,22 @@
         fetch('/Admin/GetUsers?includeDeleted=true')
             .then(response => response.json())
             .then(data => {
-                const tbody = document.querySelector('#deletedUsersTable tbody');
-                tbody.innerHTML = '';
+                deletedUsersData = data.filter(u => u.isDeleted);
+                renderDeletedUsers();
+            })
+            .catch(error => console.error('Eroare:', error));
+    }
 
-                // Filtrează doar utilizatori șterși
-                const deletedUsers = data.filter(u => u.isDeleted);
+    function renderDeletedUsers() {
+        const tbody = document.querySelector('#deletedUsersTable tbody');
+        tbody.innerHTML = '';
 
-                if (deletedUsers.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nu sunt utilizatori șterși</td></tr>';
-                    return;
-                }
+        if (deletedUsersData.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nu sunt utilizatori șterși</td></tr>';
+            return;
+        }
 
-                deletedUsers.forEach(user => {
+        sortDeletedUsersData(deletedUsersData).forEach(user => {
                     const row = document.createElement('tr');
                     const deletedDate = new Date(user.deletedUtc).toLocaleString('ro-RO');
 
@@ -569,9 +609,33 @@
                         </td>
                     `;
                     tbody.appendChild(row);
-                });
-            })
-            .catch(error => console.error('Eroare:', error));
+        });
+    }
+
+    function sortDeletedUsers(key) {
+        deletedUsersSort = {
+            key: key,
+            dir: deletedUsersSort.key === key && deletedUsersSort.dir === 'asc' ? 'desc' : 'asc'
+        };
+        renderDeletedUsers();
+    }
+
+    function sortDeletedUsersData(users) {
+        if (!deletedUsersSort.key) return users;
+
+        const factor = deletedUsersSort.dir === 'asc' ? 1 : -1;
+        return [...users].sort((a, b) => {
+            const va = getDeletedUserSortValue(a, deletedUsersSort.key);
+            const vb = getDeletedUserSortValue(b, deletedUsersSort.key);
+            const cmp = typeof va === 'number' ? va - vb : va.localeCompare(vb, 'ro');
+            return cmp * factor;
+        });
+    }
+
+    function getDeletedUserSortValue(user, key) {
+        if (key === 'deletedUtc') return new Date(user.deletedUtc).getTime();
+        if (key === 'deletedBy') return user.deletedBy || 'Necunoscut';
+        return user.email;
     }
 
     // ========================================
