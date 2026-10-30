@@ -134,7 +134,7 @@ namespace SeifDigital.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Send(long id, string recipientEmail)
+        public async Task<IActionResult> Send(long id, List<string> recipientEmails)
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
                 return RedirectToAction("Login", "Account");
@@ -142,19 +142,26 @@ namespace SeifDigital.Controllers
             var ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User?.Identity?.Name);
             var senderEmail = (HttpContext.Session.GetString("LoginEmail") ?? ownerKey ?? "").Trim();
 
-            recipientEmail = (recipientEmail ?? "").Trim().ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(recipientEmail))
+            var recipients = (recipientEmails ?? new List<string>())
+                .Select(e => (e ?? "").Trim().ToLowerInvariant())
+                .Where(e => e.Length > 0 && e != senderEmail.ToLowerInvariant())
+                .Distinct()
+                .ToList();
+
+            if (recipients.Count == 0)
             {
-                TempData["AccessDenied"] = "Te rog introdu un email destinatar.";
+                TempData["AccessDenied"] = "Te rog selectează cel puțin un destinatar.";
                 return RedirectToAction(nameof(Index));
             }
 
-            var recipientExists = await _db.UserAccounts.AsNoTracking()
-                .AnyAsync(x => x.Email.ToLower() == recipientEmail);
+            var validRecipients = await _db.UserAccounts.AsNoTracking()
+                .Where(x => x.IsActive && !x.IsDeleted && recipients.Contains(x.Email.ToLower()))
+                .Select(x => x.Email.ToLower())
+                .ToListAsync();
 
-            if (!recipientExists)
+            if (validRecipients.Count != recipients.Count)
             {
-                TempData["AccessDenied"] = "Destinatarul nu există în aplicație.";
+                TempData["AccessDenied"] = "Unii destinatari nu există sau nu sunt activi.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -181,62 +188,64 @@ namespace SeifDigital.Controllers
                 }
             }
 
-            var msg = new SeifDigital.Models.UserMessage
-            {
-                RecipientOwnerKey = recipientEmail,
-                SenderEmail = senderEmail,
-                SourceType = "Notes",
-                OriginalId = note.Id,
-                CreatedUtc = DateTime.UtcNow,
-                Text = note.Title,
-                NoteText = note.Text,
-                // ✅ NOU: Stochează fișierele cu FileType ca JSON
-                AttachedImageFileIds = attachedFiles.Count > 0 
-                    ? System.Text.Json.JsonSerializer.Serialize(attachedFiles)
-                    : null
-            };
+            string attachedJson = attachedFiles.Count > 0
+                ? System.Text.Json.JsonSerializer.Serialize(attachedFiles)
+                : null;
 
-            _db.UserMessages.Add(msg);
-            await _db.SaveChangesAsync();
-
-            // ✅ NOU: Trimite email către destinatar
-            try
+            foreach (var recipient in recipients)
             {
-                string subject = "Mesaj nou în WizVault";
-                string body = $@"Ati primit un mesaj nou in Wizvault
+                var msg = new SeifDigital.Models.UserMessage
+                {
+                    RecipientOwnerKey = recipient,
+                    SenderEmail = senderEmail,
+                    SourceType = "Notes",
+                    OriginalId = note.Id,
+                    CreatedUtc = DateTime.UtcNow,
+                    Text = note.Title,
+                    NoteText = note.Text,
+                    AttachedImageFileIds = attachedJson
+                };
+
+                _db.UserMessages.Add(msg);
+                await _db.SaveChangesAsync();
+
+                try
+                {
+                    string subject = "Mesaj nou în WizVault";
+                    string body = $@"Ati primit un mesaj nou in Wizvault
 
 https://wizvault.wizpro.ro/";
 
-                _email.Send(recipientEmail, subject, body);
+                    _email.Send(recipient, subject, body);
 
-                _audit.Log(HttpContext, "Message.Send.Email", "Success",
-                    targetType: "UserMessage",
-                    targetId: msg.Id.ToString(),
-                    details: new { to = recipientEmail, subject });
-            }
-            catch (Exception ex)
-            {
-                _audit.Log(HttpContext, "Message.Send.Email", "Error",
-                    targetType: "UserMessage",
-                    targetId: msg.Id.ToString(),
-                    reason: "SmtpError",
-                    details: new { to = recipientEmail, error = ex.Message });
-                // ⚠️ Nu aruncăm eroare - mesajul a fost salvat în DB oricum
-            }
-
-            _audit.Log(HttpContext, "Message.Send", "Success",
-                targetType: "UserMessage",
-                targetId: msg.Id.ToString(),
-                details: new
+                    _audit.Log(HttpContext, "Message.Send.Email", "Success",
+                        targetType: "UserMessage",
+                        targetId: msg.Id.ToString(),
+                        details: new { to = recipient, subject });
+                }
+                catch (Exception ex)
                 {
-                    sourceType = "Notes",
-                    messageId = msg.Id,
-                    originalId = id,
-                    from = senderEmail,
-                    to = recipientEmail,
-                    createdUtc = msg.CreatedUtc,
-                    fileCount = attachedFiles.Count  // ✅ NOU
-                });
+                    _audit.Log(HttpContext, "Message.Send.Email", "Error",
+                        targetType: "UserMessage",
+                        targetId: msg.Id.ToString(),
+                        reason: "SmtpError",
+                        details: new { to = recipient, error = ex.Message });
+                }
+
+                _audit.Log(HttpContext, "Message.Send", "Success",
+                    targetType: "UserMessage",
+                    targetId: msg.Id.ToString(),
+                    details: new
+                    {
+                        sourceType = "Notes",
+                        messageId = msg.Id,
+                        originalId = id,
+                        from = senderEmail,
+                        to = recipient,
+                        createdUtc = msg.CreatedUtc,
+                        fileCount = attachedFiles.Count
+                    });
+            }
 
             return RedirectToAction(nameof(Index));
         }

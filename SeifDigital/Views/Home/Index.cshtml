@@ -274,14 +274,15 @@
                 <div class="modal-body">
                     <input type="hidden" name="id" id="sendSecretId" value="" />
 
-                    <label class="form-label">Email destinatar</label>
-                    <input type="text"
-                           class="form-control"
-                           name="recipientEmail"
-                           id="sendRecipientEmail"
-                           placeholder="ex: coleg@wizrom.ro"
-                           required />
-                    <div class="form-text">Introdu emailul utilizatorului din WizVault.</div>
+                    <label class="form-label">Destinatari</label>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="sendSelectAll" onchange="toggleAllRecipients(this, 'sendRecipientsList')" />
+                        <label class="form-check-label" for="sendSelectAll">Select all</label>
+                    </div>
+                    <div id="sendRecipientsList" class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                        <p class="text-muted mb-0">Se încarcă utilizatorii...</p>
+                    </div>
+                    <div class="form-text">Se trimite o copie identică la fiecare utilizator selectat.</div>
                 </div>
 
                 <div class="modal-footer">
@@ -712,17 +713,42 @@
         // ===== NOU: Trimite -> modal =====
         function openSendModal(id) {
             const hiddenId = document.getElementById("sendSecretId");
-            const emailInput = document.getElementById("sendRecipientEmail");
-
             if (hiddenId) hiddenId.value = id;
-            if (emailInput) {
-                emailInput.value = "";
-                setTimeout(() => emailInput.focus(), 150);
-            }
+            loadRecipients("sendRecipientsList", "sendSelectAll");
 
             const modalEl = document.getElementById("sendModal");
             const modal = new bootstrap.Modal(modalEl);
             modal.show();
+        }
+
+        async function loadRecipients(listId, selectAllId) {
+            const list = document.getElementById(listId);
+            const selectAll = document.getElementById(selectAllId);
+            if (selectAll) selectAll.checked = false;
+            list.innerHTML = '<p class="text-muted mb-0">Se încarcă utilizatorii...</p>';
+
+            try {
+                const response = await fetch('/Home/GetRecipients');
+                const users = await response.json();
+
+                if (!users || users.length === 0) {
+                    list.innerHTML = '<p class="text-muted mb-0">Nu există alți utilizatori activi.</p>';
+                    return;
+                }
+
+                list.innerHTML = users.map(u => `
+                    <div class="form-check">
+                        <input class="form-check-input recipient-checkbox" type="checkbox" name="recipientEmails" value="${u.email}" id="${listId}_${u.email}" />
+                        <label class="form-check-label" for="${listId}_${u.email}">${u.email}</label>
+                    </div>`).join('');
+            } catch (err) {
+                console.error(err);
+                list.innerHTML = '<p class="text-danger mb-0">Eroare la încărcarea utilizatorilor.</p>';
+            }
+        }
+
+        function toggleAllRecipients(source, listId) {
+            document.querySelectorAll(`#${listId} .recipient-checkbox`).forEach(cb => cb.checked = source.checked);
         }
 
         // ===== NOU: Upload Imagine -> modal =====

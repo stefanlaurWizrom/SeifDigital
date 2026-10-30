@@ -449,9 +449,26 @@ namespace SeifDigital.Controllers
             return RedirectToAction("Index");
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetRecipients()
+        {
+            if (HttpContext.Session.GetString("Status2FA") != "Validat")
+                return Unauthorized();
+
+            string senderEmail = (HttpContext.Session.GetString("LoginEmail") ?? "").Trim().ToLowerInvariant();
+
+            var recipients = await _context.UserAccounts.AsNoTracking()
+                .Where(x => x.IsActive && !x.IsDeleted && x.Email.ToLower() != senderEmail)
+                .OrderBy(x => x.Email)
+                .Select(x => new { email = x.Email })
+                .ToListAsync();
+
+            return Json(recipients);
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> SendSecret(int id, string recipientEmail)
+        public async Task<IActionResult> SendSecret(int id, List<string> recipientEmails)
         {
             if (HttpContext.Session.GetString("Status2FA") != "Validat")
                 return RedirectToAction("Login", "Account");
@@ -459,19 +476,26 @@ namespace SeifDigital.Controllers
             string ownerKey = OwnerKeyHelper.GetOwnerKey(HttpContext, User.Identity?.Name);
             string senderEmail = (HttpContext.Session.GetString("LoginEmail") ?? ownerKey ?? "").Trim();
 
-            recipientEmail = (recipientEmail ?? "").Trim().ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(recipientEmail))
+            var recipients = (recipientEmails ?? new List<string>())
+                .Select(e => (e ?? "").Trim().ToLowerInvariant())
+                .Where(e => e.Length > 0 && e != senderEmail.ToLowerInvariant())
+                .Distinct()
+                .ToList();
+
+            if (recipients.Count == 0)
             {
-                TempData["AccessDenied"] = "Te rog introdu un email destinatar.";
+                TempData["AccessDenied"] = "Te rog selectează cel puțin un destinatar.";
                 return RedirectToAction("Index");
             }
 
-            var recipientExists = await _context.UserAccounts.AsNoTracking()
-                .AnyAsync(x => x.Email.ToLower() == recipientEmail);
+            var validRecipients = await _context.UserAccounts.AsNoTracking()
+                .Where(x => x.IsActive && !x.IsDeleted && recipients.Contains(x.Email.ToLower()))
+                .Select(x => x.Email.ToLower())
+                .ToListAsync();
 
-            if (!recipientExists)
+            if (validRecipients.Count != recipients.Count)
             {
-                TempData["AccessDenied"] = "Destinatarul nu există în aplicație.";
+                TempData["AccessDenied"] = "Unii destinatari nu există sau nu sunt activi.";
                 return RedirectToAction("Index");
             }
 
@@ -497,67 +521,70 @@ namespace SeifDigital.Controllers
                 }
             }
 
-            var msg = new SeifDigital.Models.UserMessage
+            string attachedJson = attachedFiles.Count > 0
+                ? System.Text.Json.JsonSerializer.Serialize(attachedFiles)
+                : null;
+
+            foreach (var recipient in recipients)
             {
-                RecipientOwnerKey = recipientEmail,
-                SenderEmail = senderEmail,
-                SourceType = "Parole",
-                OriginalId = item.Id,
-                CreatedUtc = DateTime.UtcNow,
+                var msg = new SeifDigital.Models.UserMessage
+                {
+                    RecipientOwnerKey = recipient,
+                    SenderEmail = senderEmail,
+                    SourceType = "Parole",
+                    OriginalId = item.Id,
+                    CreatedUtc = DateTime.UtcNow,
 
-                TitluAplicatie = item.TitluAplicatie,
-                UsernameSalvat = item.UsernameSalvat,
-                DateCriptate = item.DateCriptate,
-                DetaliiCriptate = item.DetaliiCriptate,
-                DetaliiTokens = item.DetaliiTokens,
+                    TitluAplicatie = item.TitluAplicatie,
+                    UsernameSalvat = item.UsernameSalvat,
+                    DateCriptate = item.DateCriptate,
+                    DetaliiCriptate = item.DetaliiCriptate,
+                    DetaliiTokens = item.DetaliiTokens,
 
-                // ✅ ACTUALIZAT: Stochează fișierele cu FileType ca JSON
-                AttachedImageFileIds = attachedFiles.Count > 0 
-                    ? System.Text.Json.JsonSerializer.Serialize(attachedFiles)
-                    : null
-            };
+                    AttachedImageFileIds = attachedJson
+                };
 
-            _context.UserMessages.Add(msg);
-            await _context.SaveChangesAsync();
+                _context.UserMessages.Add(msg);
+                await _context.SaveChangesAsync();
 
-            // ✅ NOU: Trimite email către destinatar
-            try
-            {
-                string subject = "Mesaj nou în WizVault";
-                string body = $@"Ati primit un mesaj nou in Wizvault
+                try
+                {
+                    string subject = "Mesaj nou în WizVault";
+                    string body = $@"Ati primit un mesaj nou in Wizvault
 
 https://wizvault.wizpro.ro/";
 
-                _email.Send(recipientEmail, subject, body);
+                    _email.Send(recipient, subject, body);
 
-                _audit.Log(HttpContext, "Message.Send.Email", "Success",
+                    _audit.Log(HttpContext, "Message.Send.Email", "Success",
+                        targetType: "UserMessage",
+                        targetId: msg.Id.ToString(),
+                        details: new { to = recipient, subject });
+                }
+                catch (Exception ex)
+                {
+                    _audit.Log(HttpContext, "Message.Send.Email", "Error",
+                        targetType: "UserMessage",
+                        targetId: msg.Id.ToString(),
+                        reason: "SmtpError",
+                        details: new { to = recipient, error = ex.Message });
+                }
+
+                _audit.Log(HttpContext, "Message.Send", "Success",
                     targetType: "UserMessage",
                     targetId: msg.Id.ToString(),
-                    details: new { to = recipientEmail, subject });
-            }
-            catch (Exception ex)
-            {
-                _audit.Log(HttpContext, "Message.Send.Email", "Error",
-                    targetType: "UserMessage",
-                    targetId: msg.Id.ToString(),
-                    reason: "SmtpError",
-                    details: new { to = recipientEmail, error = ex.Message });
-                // ⚠️ Nu aruncăm eroare - mesajul a fost salvat în DB oricum
+                    details: new
+                    {
+                        sourceType = "Parole",
+                        messageId = msg.Id,
+                        originalId = id,
+                        from = senderEmail,
+                        to = recipient,
+                        createdUtc = msg.CreatedUtc,
+                        fileCount = attachedFiles.Count
+                    });
             }
 
-            _audit.Log(HttpContext, "Message.Send", "Success",
-            targetType: "UserMessage",
-            targetId: msg.Id.ToString(),
-            details: new
-            {
-                    sourceType = "Parole",
-                    messageId = msg.Id,
-                    originalId = id,
-                    from = senderEmail,
-                    to = recipientEmail,
-                    createdUtc = msg.CreatedUtc,
-                    fileCount = attachedFiles.Count
-            });
             return RedirectToAction("Index");
         }
 
